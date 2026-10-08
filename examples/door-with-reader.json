@@ -1,0 +1,11 @@
+[
+	{ "id": "c1a0f0e0d0c0b001", "type": "tab", "label": "inwendo ERP door", "disabled": false, "info": "A door that the ERP opens (app button) and that opens for cards / QR codes a reader reads.\n\nReplace the inject node with your reader (serial in, HID, Wiegand, MQTT ...) and the debug nodes with your relay (GPIO, Shelly, Modbus ...)." },
+	{ "id": "c1a0f0e0d0c0b002", "type": "inwendo-erp-config", "name": "inwendo ERP", "host": "https://demo.iw-erp.de" },
+	{ "id": "c1a0f0e0d0c0b003", "type": "inwendo-erp-lock-bridge", "name": "Vereinsheim", "server": "c1a0f0e0d0c0b002", "instanceId": "", "delivery": "mqtt", "publicUrl": "" },
+	{ "id": "c1a0f0e0d0c0b004", "type": "inwendo-erp-lock", "z": "c1a0f0e0d0c0b001", "name": "", "bridge": "c1a0f0e0d0c0b003", "lockId": "front_door", "lockName": "Haupteingang", "unlockMethod": "remote", "confirm": "auto", "resultTimeout": 10, "x": 170, "y": 80, "wires": [["c1a0f0e0d0c0b005"]] },
+	{ "id": "c1a0f0e0d0c0b005", "type": "debug", "z": "c1a0f0e0d0c0b001", "name": "relay: open the door for 3 s", "active": true, "tosidebar": true, "console": false, "complete": "payload", "targetType": "msg", "x": 440, "y": 80, "wires": [] },
+	{ "id": "c1a0f0e0d0c0b006", "type": "inject", "z": "c1a0f0e0d0c0b001", "name": "reader: card 04A1B2C3", "props": [{ "p": "payload" }], "repeat": "", "once": false, "topic": "", "payload": "04A1B2C3", "payloadType": "str", "x": 160, "y": 180, "wires": [["c1a0f0e0d0c0b007"]] },
+	{ "id": "c1a0f0e0d0c0b007", "type": "inwendo-erp-access-check", "z": "c1a0f0e0d0c0b001", "name": "", "target": "bridgeLock", "bridge": "c1a0f0e0d0c0b003", "lockId": "front_door", "server": "", "smartLockId": "", "credentialType": "auto", "open": false, "x": 410, "y": 180, "wires": [["c1a0f0e0d0c0b008"], ["c1a0f0e0d0c0b009"]] },
+	{ "id": "c1a0f0e0d0c0b008", "type": "debug", "z": "c1a0f0e0d0c0b001", "name": "granted: relay + green LED", "active": true, "tosidebar": true, "console": false, "complete": "payload", "targetType": "msg", "x": 680, "y": 160, "wires": [] },
+	{ "id": "c1a0f0e0d0c0b009", "type": "debug", "z": "c1a0f0e0d0c0b001", "name": "denied: red LED + buzzer", "active": true, "tosidebar": true, "console": false, "complete": "payload", "targetType": "msg", "x": 680, "y": 200, "wires": [] }
+]

@@ -1,0 +1,125 @@
+<script type="text/javascript">
+	RED.nodes.registerType('inwendo-erp-access-check', {
+		category: 'inwendo ERP',
+		color: '#7fb7df',
+		defaults: {
+			name: { value: '' },
+			target: { value: 'bridgeLock' },
+			bridge: {
+				value: '',
+				type: 'inwendo-erp-lock-bridge',
+				required: false,
+				validate: function (value) {
+					const target = $('#node-input-target').length ? $('#node-input-target').val() : this.target;
+					return target !== 'bridgeLock' || !!value;
+				},
+			},
+			lockId: { value: '' },
+			server: { value: '', type: 'inwendo-erp-config', required: false },
+			smartLockId: { value: '' },
+			credentialType: { value: 'auto' },
+			open: { value: false },
+		},
+		inputs: 1,
+		outputs: 2,
+		outputLabels: ['access granted', 'access denied'],
+		icon: 'inwendo.png',
+		paletteLabel: 'inwendo erp access check',
+		label: function () {
+			return this.name || 'access ' + (this.target === 'smartLock' ? 'smart lock ' + this.smartLockId : this.lockId || '');
+		},
+		oneditprepare: function () {
+			function update() {
+				const smartLock = $('#node-input-target').val() === 'smartLock';
+				$('.inwendo-erp-check-bridge').toggle(!smartLock);
+				$('.inwendo-erp-check-erp').toggle(smartLock);
+			}
+			$('#node-input-target').on('change', update);
+			update();
+		},
+	});
+</script>
+
+<script type="text/html" data-template-name="inwendo-erp-access-check">
+	<div class="form-row">
+		<label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+		<input type="text" id="node-input-name" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-target"><i class="fa fa-lock"></i> Lock</label>
+		<select id="node-input-target">
+			<option value="bridgeLock">A lock of my lock bridge</option>
+			<option value="smartLock">Any ERP smart lock (by id)</option>
+		</select>
+	</div>
+	<div class="form-row inwendo-erp-check-bridge">
+		<label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+		<input type="text" id="node-input-bridge" />
+	</div>
+	<div class="form-row inwendo-erp-check-bridge">
+		<label for="node-input-lockId"><i class="fa fa-hashtag"></i> Lock ID</label>
+		<input type="text" id="node-input-lockId" placeholder="front_door (or msg.lockId)" />
+	</div>
+	<div class="form-row inwendo-erp-check-erp">
+		<label for="node-input-server"><i class="fa fa-server"></i> ERP</label>
+		<input type="text" id="node-input-server" />
+	</div>
+	<div class="form-row inwendo-erp-check-erp">
+		<label for="node-input-smartLockId"><i class="fa fa-hashtag"></i> Smart lock ID</label>
+		<input type="text" id="node-input-smartLockId" placeholder="12 (or msg.smartLockId)" />
+	</div>
+	<div class="form-row inwendo-erp-check-erp">
+		<label for="node-input-open">&nbsp;</label>
+		<label for="node-input-open" style="width: 70%">
+			<input type="checkbox" id="node-input-open" style="display: inline-block; width: auto; vertical-align: top" />
+			ERP opens the lock when access is granted (Nuki, LOQED, ...)
+		</label>
+	</div>
+	<div class="form-row">
+		<label for="node-input-credentialType"><i class="fa fa-id-card"></i> Credential</label>
+		<select id="node-input-credentialType">
+			<option value="auto">Detect (app QR code, member card QR, card)</option>
+			<option value="access_code">App QR code of this lock</option>
+			<option value="member_card">Digital member card (QR)</option>
+			<option value="card">RFID / chip card number</option>
+		</select>
+	</div>
+</script>
+
+<script type="text/html" data-help-name="inwendo-erp-access-check">
+	<p>Asks the inwendo ERP whether a credential read by a barcode, QR or RFID reader may open a lock.</p>
+	<h3>Inputs</h3>
+	<dl class="message-properties">
+		<dt>payload <span class="property-type">string | number | Buffer</span></dt>
+		<dd>What the reader read; line breaks are removed.</dd>
+		<dt class="optional">lockId / smartLockId</dt>
+		<dd>Override the lock of the node.</dd>
+		<dt class="optional">credentialType <span class="property-type">string</span></dt>
+		<dd><code>auto</code>, <code>access_code</code>, <code>member_card</code> or <code>card</code>.</dd>
+		<dt class="optional">open <span class="property-type">boolean</span></dt>
+		<dd>Let the ERP open a smart lock of another provider when access is granted.</dd>
+	</dl>
+	<h3>Outputs</h3>
+	<ol class="node-ports">
+		<li>Access granted</li>
+		<li>Access denied</li>
+	</ol>
+	<dl class="message-properties">
+		<dt>payload <span class="property-type">object</span></dt>
+		<dd>Answer of the ERP: <code>granted</code>, <code>reason</code> (<code>granted</code>, <code>unknown_credential</code>,
+			<code>no_access</code>, <code>invalid_code</code>, <code>code_expired</code>), <code>credential_type</code>,
+			<code>smart_lock</code>, <code>person</code> (id, name) and <code>opened</code>.</dd>
+		<dt>granted <span class="property-type">boolean</span></dt>
+		<dt>person <span class="property-type">object | null</span></dt>
+		<dt>credential <span class="property-type">string</span></dt>
+		<dd>The credential that was checked.</dd>
+	</dl>
+	<h3>Details</h3>
+	<p>
+		The ERP checks with the same rules as the app (super admin, self service rights, bookable, employment contract,
+		booking ±1 h) and writes the smart lock log. Credentials: the QR code the app shows for a lock (5 minutes valid),
+		the QR code of the digital member card and the card number stored at the person (as for Gantner readers). The plain
+		member number is not accepted, it can be guessed.
+	</p>
+	<p>The lock must be synced in the ERP first (smart lock connection → <i>Sync devices</i>), otherwise the check fails with 404.</p>
+</script>

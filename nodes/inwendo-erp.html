@@ -1,0 +1,186 @@
+<script type="text/javascript">
+	(function () {
+		const RESOURCES = [
+			['booking', 'Booking'],
+			['company', 'Company'],
+			['event', 'Event'],
+			['eventSignUp', 'Event Sign-Up'],
+			['invoice', 'Invoice'],
+			['newsArticle', 'News Article'],
+			['offer', 'Offer'],
+			['person', 'Person'],
+			['project', 'Project'],
+			['smartLock', 'Smart Lock'],
+			['smartLockLog', 'Smart Lock Log'],
+			['ticket', 'Ticket'],
+			['timeEntry', 'Time Entry'],
+			['webhook', 'Webhook'],
+			['genericRequest', 'Generic API Request'],
+		];
+		const OPERATIONS = {
+			get: 'Get',
+			getAll: 'Get Many',
+			create: 'Create',
+			update: 'Update (PATCH)',
+			getPdf: 'Get PDF',
+			unlock: 'Unlock (open)',
+			lock: 'Lock',
+			status: 'Status',
+		};
+
+		function operationsFor(resource) {
+			if (resource === 'invoice' || resource === 'offer') {
+				return ['get', 'getAll', 'create', 'getPdf'];
+			}
+			if (resource === 'smartLockLog') {
+				return ['get', 'getAll'];
+			}
+			if (resource === 'smartLock') {
+				return ['get', 'getAll', 'unlock', 'lock', 'status'];
+			}
+			return ['get', 'getAll', 'create', 'update'];
+		}
+
+		RED.nodes.registerType('inwendo-erp', {
+			category: 'inwendo ERP',
+			color: '#7fb7df',
+			defaults: {
+				name: { value: '' },
+				server: { value: '', type: 'inwendo-erp-config', required: true },
+				resource: { value: 'company' },
+				operation: { value: 'getAll' },
+				entityId: { value: '' },
+				returnAll: { value: false },
+				limit: { value: 50 },
+				searchString: { value: '' },
+				method: { value: 'GET' },
+				endpoint: { value: '' },
+			},
+			inputs: 1,
+			outputs: 1,
+			icon: 'inwendo.png',
+			label: function () {
+				if (this.name) {
+					return this.name;
+				}
+				if (this.resource === 'genericRequest') {
+					return (this.method || 'GET') + ' ' + (this.endpoint || 'inwendo erp');
+				}
+				const resource = RESOURCES.find((entry) => entry[0] === this.resource);
+				return (OPERATIONS[this.operation] || this.operation) + ': ' + (resource ? resource[1] : this.resource);
+			},
+			paletteLabel: 'inwendo erp',
+			oneditprepare: function () {
+				const node = this;
+				const resourceSelect = $('#node-input-resource');
+				RESOURCES.forEach((entry) => resourceSelect.append($('<option>').val(entry[0]).text(entry[1])));
+				resourceSelect.val(node.resource);
+
+				function update() {
+					const resource = resourceSelect.val();
+					const generic = resource === 'genericRequest';
+					$('.inwendo-erp-generic').toggle(generic);
+					$('.inwendo-erp-resource').toggle(!generic);
+					const operationSelect = $('#node-input-operation');
+					const current = operationSelect.val() || node.operation;
+					operationSelect.empty();
+					operationsFor(resource).forEach((operation) => operationSelect.append($('<option>').val(operation).text(OPERATIONS[operation])));
+					operationSelect.val(operationsFor(resource).includes(current) ? current : 'getAll');
+					updateOperation();
+				}
+
+				function updateOperation() {
+					const operation = $('#node-input-operation').val();
+					const generic = resourceSelect.val() === 'genericRequest';
+					$('.inwendo-erp-id').toggle(!generic && operation !== 'getAll' && operation !== 'create');
+					$('.inwendo-erp-list').toggle(!generic && operation === 'getAll');
+					$('.inwendo-erp-limit').toggle(!generic && operation === 'getAll' && !$('#node-input-returnAll').is(':checked'));
+				}
+
+				resourceSelect.on('change', update);
+				$('#node-input-operation').on('change', updateOperation);
+				$('#node-input-returnAll').on('change', updateOperation);
+				update();
+			},
+		});
+	})();
+</script>
+
+<script type="text/html" data-template-name="inwendo-erp">
+	<div class="form-row">
+		<label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+		<input type="text" id="node-input-name" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-server"><i class="fa fa-server"></i> ERP</label>
+		<input type="text" id="node-input-server" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-resource"><i class="fa fa-database"></i> Resource</label>
+		<select id="node-input-resource"></select>
+	</div>
+	<div class="form-row inwendo-erp-resource">
+		<label for="node-input-operation"><i class="fa fa-cog"></i> Operation</label>
+		<select id="node-input-operation"></select>
+	</div>
+	<div class="form-row inwendo-erp-id">
+		<label for="node-input-entityId"><i class="fa fa-hashtag"></i> ID</label>
+		<input type="text" id="node-input-entityId" placeholder="or msg.id" />
+	</div>
+	<div class="form-row inwendo-erp-list">
+		<label for="node-input-searchString"><i class="fa fa-search"></i> Search</label>
+		<input type="text" id="node-input-searchString" placeholder="or msg.searchString" />
+	</div>
+	<div class="form-row inwendo-erp-list">
+		<label for="node-input-returnAll">&nbsp;</label>
+		<label for="node-input-returnAll" style="width: 70%">
+			<input type="checkbox" id="node-input-returnAll" style="display: inline-block; width: auto; vertical-align: top" />
+			Return all (read every page)
+		</label>
+	</div>
+	<div class="form-row inwendo-erp-limit">
+		<label for="node-input-limit"><i class="fa fa-list-ol"></i> Limit</label>
+		<input type="number" id="node-input-limit" min="1" />
+	</div>
+	<div class="form-row inwendo-erp-generic">
+		<label for="node-input-method"><i class="fa fa-exchange"></i> Method</label>
+		<select id="node-input-method">
+			<option value="GET">GET</option>
+			<option value="POST">POST</option>
+			<option value="PUT">PUT</option>
+			<option value="PATCH">PATCH</option>
+			<option value="DELETE">DELETE</option>
+		</select>
+	</div>
+	<div class="form-row inwendo-erp-generic">
+		<label for="node-input-endpoint"><i class="fa fa-link"></i> Endpoint</label>
+		<input type="text" id="node-input-endpoint" placeholder="/api/crm/crmcompanies" />
+	</div>
+</script>
+
+<script type="text/html" data-help-name="inwendo-erp">
+	<p>Reads and writes inwendo ERP data (the functions of the n8n node).</p>
+	<h3>Inputs</h3>
+	<dl class="message-properties">
+		<dt class="optional">payload <span class="property-type">object</span></dt>
+		<dd>Fields for <i>Create</i> and <i>Update</i> (wrapped in the form block of the resource), body of a generic request.</dd>
+		<dt class="optional">id <span class="property-type">string | number</span></dt>
+		<dd>ID for Get, Update, Get PDF and the smart lock actions; overrides the node setting.</dd>
+		<dt class="optional">query <span class="property-type">object</span></dt>
+		<dd>Query parameters, e.g. <code>{"company": 12}</code> for list filters.</dd>
+		<dt class="optional">resource, operation, searchString, limit, returnAll, method, endpoint</dt>
+		<dd>Override the node settings.</dd>
+	</dl>
+	<h3>Outputs</h3>
+	<dl class="message-properties">
+		<dt>payload <span class="property-type">object | array | Buffer</span></dt>
+		<dd>Answer of the ERP. <i>Get Many</i> returns an array, <i>Get PDF</i> a Buffer with <code>msg.filename</code> and <code>msg.contentType</code>.</dd>
+	</dl>
+	<h3>Details</h3>
+	<p>
+		<i>Update</i> uses <code>PATCH</code>: fields you do not send keep their value. Invoices and offers cannot be
+		changed once created. <i>Smart Lock → Unlock / Lock</i> opens or locks an ERP smart lock through its provider
+		(Nuki, LOQED, Home Assistant, Node-RED) with the rights of the token's user and writes the smart lock log.
+	</p>
+	<p>Errors are thrown with the ERP error code and message (<code>X-IW-ERROR-CODE</code> / <code>X-IW-ERROR-JSON</code>), also in <code>msg.error</code>; use a <i>catch</i> node.</p>
+</script>

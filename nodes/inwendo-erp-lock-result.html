@@ -1,0 +1,40 @@
+<script type="text/javascript">
+	RED.nodes.registerType('inwendo-erp-lock-result', {
+		category: 'inwendo ERP',
+		color: '#7fb7df',
+		defaults: {
+			name: { value: '' },
+		},
+		inputs: 1,
+		outputs: 0,
+		align: 'right',
+		icon: 'inwendo.png',
+		paletteLabel: 'inwendo erp lock result',
+		label: function () {
+			return this.name || 'lock result';
+		},
+	});
+</script>
+
+<script type="text/html" data-template-name="inwendo-erp-lock-result">
+	<div class="form-row">
+		<label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+		<input type="text" id="node-input-name" />
+	</div>
+</script>
+
+<script type="text/html" data-help-name="inwendo-erp-lock-result">
+	<p>Reports the result of a lock command back to the ERP.</p>
+	<h3>Inputs</h3>
+	<dl class="message-properties">
+		<dt>_inwendoLock <span class="property-type">object</span></dt>
+		<dd>Set by the <i>inwendo erp lock</i> node; keep it on the message.</dd>
+		<dt class="optional">success <span class="property-type">boolean</span></dt>
+		<dd>Whether the command was executed (a boolean <code>msg.payload</code> works as well; default true).</dd>
+		<dt class="optional">state <span class="property-type">string</span></dt>
+		<dd>New lock state, e.g. <code>unlocked</code>.</dd>
+		<dt class="optional">message <span class="property-type">string</span></dt>
+		<dd>Error text for the ERP log.</dd>
+	</dl>
+	<p>Only needed for lock nodes set to <i>Wait for an "inwendo erp lock result" node</i>.</p>
+</script>

@@ -1,0 +1,58 @@
+{
+	"name": "node-red-contrib-inwendo-erp",
+	"version": "0.1.0",
+	"description": "Node-RED nodes for the inwendo ERP: API token login, ERP data, webhooks, smart locks and access checks for barcode / QR / RFID readers",
+	"keywords": [
+		"node-red",
+		"inwendo",
+		"erp",
+		"smart lock",
+		"access control",
+		"rfid",
+		"barcode"
+	],
+	"license": "MIT",
+	"homepage": "https://github.com/inwendo/node-red-contrib-inwendo-erp",
+	"author": {
+		"name": "inwendo GmbH"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/inwendo/node-red-contrib-inwendo-erp.git"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"files": [
+		"nodes",
+		"examples"
+	],
+	"scripts": {
+		"lint": "eslint nodes test",
+		"test": "mocha \"test/**/*_spec.js\"",
+		"test:e2e": "mocha --timeout 60000 \"test/e2e/*_e2e.js\""
+	},
+	"node-red": {
+		"version": ">=3.0.0",
+		"nodes": {
+			"inwendo-erp-config": "nodes/inwendo-erp-config.js",
+			"inwendo-erp": "nodes/inwendo-erp.js",
+			"inwendo-erp-trigger": "nodes/inwendo-erp-trigger.js",
+			"inwendo-erp-lock-bridge": "nodes/inwendo-erp-lock-bridge.js",
+			"inwendo-erp-lock": "nodes/inwendo-erp-lock.js",
+			"inwendo-erp-lock-result": "nodes/inwendo-erp-lock-result.js",
+			"inwendo-erp-access-check": "nodes/inwendo-erp-access-check.js"
+		}
+	},
+	"dependencies": {
+		"mqtt": "^5.16.0"
+	},
+	"devDependencies": {
+		"aedes": "^0.51.3",
+		"eslint": "^8.57.1",
+		"mocha": "^11.8.0",
+		"node-red": "^4.1.16",
+		"node-red-node-test-helper": "^0.3.6",
+		"supertest": "^7.3.1"
+	}
+}
