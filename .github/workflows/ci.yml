@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # Runs against a live ERP (with MQTT) when IW_E2E_ERP_HOST / IW_E2E_ERP_TOKEN are
+      # configured as repository secrets; without them the tests are skipped.
+      - run: npm run test:e2e
+        env:
+          IW_E2E_ERP_HOST: ${{ secrets.IW_E2E_ERP_HOST }}
+          IW_E2E_ERP_TOKEN: ${{ secrets.IW_E2E_ERP_TOKEN }}

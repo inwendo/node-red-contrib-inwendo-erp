@@ -1,0 +1,83 @@
+<script type="text/javascript">
+	RED.nodes.registerType('inwendo-erp-config', {
+		category: 'config',
+		defaults: {
+			name: { value: '' },
+			host: { value: '', required: true },
+		},
+		credentials: {
+			apiToken: { type: 'password', required: true },
+		},
+		label: function () {
+			return this.name || this.host || 'inwendo ERP';
+		},
+		oneditprepare: function () {
+			const node = this;
+			$('#node-config-inwendo-erp-test').on('click', function () {
+				const result = $('#node-config-inwendo-erp-test-result');
+				result.text('…');
+				$.ajax({
+					url: 'inwendo-erp/config/test',
+					type: 'POST',
+					contentType: 'application/json',
+					data: JSON.stringify({
+						id: node.id,
+						host: $('#node-config-input-host').val(),
+						apiToken: $('#node-config-input-apiToken').val(),
+					}),
+					success: function (data) {
+						result.text(data.ok ? 'OK' : data.error);
+						result.css('color', data.ok ? 'green' : 'red');
+					},
+					error: function (xhr) {
+						result.text(xhr.statusText);
+						result.css('color', 'red');
+					},
+				});
+			});
+		},
+	});
+</script>
+
+<script type="text/html" data-template-name="inwendo-erp-config">
+	<div class="form-row">
+		<label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+		<input type="text" id="node-config-input-name" placeholder="inwendo ERP" />
+	</div>
+	<div class="form-row">
+		<label for="node-config-input-host"><i class="fa fa-globe"></i> ERP Host</label>
+		<input type="text" id="node-config-input-host" placeholder="https://demo.iw-erp.de" />
+	</div>
+	<div class="form-row">
+		<label for="node-config-input-apiToken"><i class="fa fa-key"></i> API Token</label>
+		<input type="password" id="node-config-input-apiToken" />
+	</div>
+	<div class="form-row">
+		<label></label>
+		<button type="button" class="red-ui-button" id="node-config-inwendo-erp-test">Test token</button>
+		<span id="node-config-inwendo-erp-test-result" style="margin-left: 10px"></span>
+	</div>
+	<div class="form-tips">
+		Create the token in the ERP under <b>Settings → API Access Tokens</b>, long-lived. Scopes:
+		<b>Event / Write</b> for smart locks and readers, <b>Webhook / Write</b> for the trigger node and
+		the scopes of the resources the <i>inwendo erp</i> node reads or writes.
+	</div>
+</script>
+
+<script type="text/html" data-help-name="inwendo-erp-config">
+	<p>Connection to an inwendo ERP instance.</p>
+	<h3>Properties</h3>
+	<dl class="message-properties">
+		<dt>ERP Host <span class="property-type">string</span></dt>
+		<dd>Base URL of the ERP, e.g. <code>https://demo.iw-erp.de</code>.</dd>
+		<dt>API Token <span class="property-type">string</span></dt>
+		<dd>API access token (JWT), sent as <code>x-iw-jwt-token</code> header.</dd>
+	</dl>
+	<h3>Details</h3>
+	<p>
+		Required scopes: <b>Event / Write</b> for the lock bridge and the access check,
+		<b>Webhook / Write</b> for the trigger node, plus the scopes of the resources you use
+		(CRM, Billing, Time, Event Booking, Media, ...). Optional hardening: limit the token to the URL
+		paths <code>/api/nodered/.*</code>.
+	</p>
+</script>
