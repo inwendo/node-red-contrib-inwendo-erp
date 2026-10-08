@@ -1,0 +1,98 @@
+<script type="text/javascript">
+	RED.nodes.registerType('inwendo-erp-lock', {
+		category: 'inwendo ERP',
+		color: '#7fb7df',
+		defaults: {
+			name: { value: '' },
+			bridge: { value: '', type: 'inwendo-erp-lock-bridge', required: true },
+			lockId: { value: '', required: true, validate: RED.validators.regex(/^[A-Za-z0-9_.:-]{1,190}$/) },
+			lockName: { value: '' },
+			unlockMethod: { value: 'remote' },
+			confirm: { value: 'auto' },
+			resultTimeout: { value: 10, validate: RED.validators.number() },
+		},
+		inputs: 1,
+		outputs: 1,
+		icon: 'inwendo.png',
+		paletteLabel: 'inwendo erp lock',
+		label: function () {
+			return this.name || this.lockName || this.lockId || 'inwendo erp lock';
+		},
+		inputLabels: 'lock state',
+		outputLabels: 'command',
+		oneditprepare: function () {
+			function update() {
+				$('.inwendo-erp-lock-timeout').toggle($('#node-input-confirm').val() === 'manual');
+			}
+			$('#node-input-confirm').on('change', update);
+			update();
+		},
+	});
+</script>
+
+<script type="text/html" data-template-name="inwendo-erp-lock">
+	<div class="form-row">
+		<label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+		<input type="text" id="node-input-name" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+		<input type="text" id="node-input-bridge" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-lockId"><i class="fa fa-hashtag"></i> Lock ID</label>
+		<input type="text" id="node-input-lockId" placeholder="front_door" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-lockName"><i class="fa fa-lock"></i> Name in ERP</label>
+		<input type="text" id="node-input-lockName" placeholder="Haupteingang" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-unlockMethod"><i class="fa fa-mobile"></i> In the app</label>
+		<select id="node-input-unlockMethod">
+			<option value="remote">Open button (ERP sends "open")</option>
+			<option value="qr_code">QR code (a scanner at the door checks it)</option>
+		</select>
+	</div>
+	<div class="form-row">
+		<label for="node-input-confirm"><i class="fa fa-check"></i> Result</label>
+		<select id="node-input-confirm">
+			<option value="auto">Report success when the message is sent</option>
+			<option value="manual">Wait for an "inwendo erp lock result" node</option>
+		</select>
+	</div>
+	<div class="form-row inwendo-erp-lock-timeout">
+		<label for="node-input-resultTimeout"><i class="fa fa-clock-o"></i> Timeout (s)</label>
+		<input type="number" id="node-input-resultTimeout" min="1" max="25" />
+	</div>
+	<div class="form-tips">
+		The lock ID must be unique within the bridge (letters, digits, <code>_ . : -</code>); it links the lock to its ERP smart lock.
+	</div>
+</script>
+
+<script type="text/html" data-help-name="inwendo-erp-lock">
+	<p>A lock (relay, motor lock, door opener, ...) the ERP can open.</p>
+	<h3>Inputs</h3>
+	<dl class="message-properties">
+		<dt>payload <span class="property-type">string</span></dt>
+		<dd>Current state reported to the ERP: <code>locked</code>, <code>unlocked</code>, <code>open</code>, <code>locking</code>,
+			<code>unlocking</code>, <code>opening</code>, <code>jammed</code>, <code>unavailable</code> or <code>unknown</code>.</dd>
+	</dl>
+	<h3>Outputs</h3>
+	<dl class="message-properties">
+		<dt>payload.command <span class="property-type">string</span></dt>
+		<dd><code>open</code> or <code>lock</code></dd>
+		<dt>payload.lock_id, payload.smart_lock_id, payload.command_id</dt>
+		<dd>Lock id in Node-RED, smart lock id in the ERP and the id of the command (MQTT).</dd>
+		<dt>topic <span class="property-type">string</span></dt>
+		<dd>The command.</dd>
+	</dl>
+	<h3>Details</h3>
+	<p>
+		The ERP sends a command when a user with access taps <i>open</i> in the app, or through the API and Home Assistant.
+		Access is checked in the ERP, Node-RED only executes. With <i>Wait for a result node</i> wire the end of your flow
+		into an <i>inwendo erp lock result</i> node with <code>msg.success</code>; the ERP log then shows failures.
+	</p>
+	<p>With <i>QR code</i> the app shows a QR code for this lock instead of the open button; check it with an
+		<i>inwendo erp access check</i> node behind your scanner.</p>
+</script>
