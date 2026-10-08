@@ -51,7 +51,7 @@
 		"aedes": "^0.51.3",
 		"eslint": "^8.57.1",
 		"mocha": "^11.8.0",
-		"node-red": "^4.1.16",
+		"node-red": "^5.0.8",
 		"node-red-node-test-helper": "^0.3.6",
 		"supertest": "^7.3.1"
 	}
