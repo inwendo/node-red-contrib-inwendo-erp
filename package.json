@@ -42,7 +42,8 @@
 			"inwendo-erp-lock-bridge": "nodes/inwendo-erp-lock-bridge.js",
 			"inwendo-erp-lock": "nodes/inwendo-erp-lock.js",
 			"inwendo-erp-lock-result": "nodes/inwendo-erp-lock-result.js",
-			"inwendo-erp-access-check": "nodes/inwendo-erp-access-check.js"
+			"inwendo-erp-access-check": "nodes/inwendo-erp-access-check.js",
+			"inwendo-erp-check-in": "nodes/inwendo-erp-check-in.js"
 		}
 	},
 	"dependencies": {

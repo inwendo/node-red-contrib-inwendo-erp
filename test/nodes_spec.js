@@ -14,6 +14,7 @@ const lockNode = require('../nodes/inwendo-erp-lock');
 const lockResultNode = require('../nodes/inwendo-erp-lock-result');
 const accessCheckNode = require('../nodes/inwendo-erp-access-check');
 const bookingScheduleNode = require('../nodes/inwendo-erp-booking-schedule');
+const checkInNode = require('../nodes/inwendo-erp-check-in');
 
 /** RED.httpNode of the test runtime: the routes of the trigger and the push bridge. */
 let httpNode = null;
@@ -21,7 +22,7 @@ function captureHttpNode(RED) {
 	httpNode = RED.httpNode;
 }
 
-const ALL_NODES = [captureHttpNode, configNode, erpNode, triggerNode, bridgeNode, lockNode, lockResultNode, accessCheckNode, bookingScheduleNode];
+const ALL_NODES = [captureHttpNode, configNode, erpNode, triggerNode, bridgeNode, lockNode, lockResultNode, accessCheckNode, bookingScheduleNode, checkInNode];
 const INSTANCE = 'nr-test-instance-1';
 const SECRET = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
 
@@ -589,6 +590,95 @@ describe('inwendo erp nodes', function () {
 			assert.strictEqual(granted[0].person.name, 'Erika Mustermann');
 			assert.strictEqual(denied.length, 2);
 			assert.strictEqual(denied[0].payload.reason, 'unknown_credential');
+		});
+	});
+	describe('inwendo-erp-check-in', function () {
+		it('checks in and out at an attendance list and routes refusals to output 2', async function () {
+			let open = false;
+			erp = await startErpMock({
+				'GET /api/event/scanner/attendancelist/9/04A1B2C3': () => {
+					open = !open;
+					return { body: { id: 31, start: '2026-10-11T18:00:00+02:00', end: open ? null : '2026-10-11T19:00:00+02:00', completed: !open } };
+				},
+				'GET /api/event/scanner/attendancelist/9/UNKNOWN': () => ({ status: 400, headers: { 'X-IW-ERROR-CODE': '1801', 'X-IW-ERROR-JSON': '[]' } }),
+				'GET /api/event/scanner/attendancelist/9/eyJmember': () => ({ body: { id: 32, start: '2026-10-11T18:00:00+02:00', end: null } }),
+			});
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 'c1', type: 'inwendo-erp-check-in', server: 'server', mode: 'attendanceList', listId: '9', wires: [['ok'], ['refused']] },
+				{ id: 'ok', type: 'helper' },
+				{ id: 'refused', type: 'helper' },
+			], credentials(erp));
+			const ok = [];
+			const refused = [];
+			helper.getNode('ok').on('input', (msg) => ok.push(msg));
+			helper.getNode('refused').on('input', (msg) => refused.push(msg));
+			const node = helper.getNode('c1');
+
+			node.receive({ payload: Buffer.from('04A1B2C3\r\n') });
+			await waitFor(() => ok.length === 1);
+			node.receive({ payload: '04A1B2C3' });
+			await waitFor(() => ok.length === 2);
+			node.receive({ payload: 'UNKNOWN' });
+			node.receive({ payload: 'https://erp.example.com/verify/eyJmember' });
+			await waitFor(() => refused.length === 1 && ok.length === 3);
+
+			assert.deepStrictEqual(ok.map((msg) => msg.action), ['check_in', 'check_out', 'check_in']);
+			assert.strictEqual(ok[0].checkedIn, true);
+			assert.strictEqual(ok[0].person.identifier, '04A1B2C3');
+			assert.strictEqual(ok[2].credential, 'eyJmember');
+			assert.strictEqual(refused[0].payload.reason, 'unknown_person');
+			assert.strictEqual(refused[0].payload.erpCode, 1801);
+			assert.strictEqual(refused[0].success, false);
+		});
+
+		it('clocks staff in with the person of the work time entry', async function () {
+			erp = await startErpMock({
+				'GET /api/time/work_entry_scanner/ec_token1': () => ({ body: { id: 77, start: '2026-10-11T08:00:00+02:00', end: null, user: { id: 3, first_name: 'Erika', last_name: 'Mustermann' } } }),
+				'GET /api/time/work_entry_scanner/ec_token2': () => ({ status: 400, headers: { 'X-IW-ERROR-CODE': '6020', 'X-IW-ERROR-JSON': '[]' } }),
+				'GET /api/time/work_entry_scanner/ec_token3': () => ({ status: 500, body: {} }),
+			});
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 'c1', type: 'inwendo-erp-check-in', server: 'server', mode: 'staffClock', wires: [['ok'], ['refused']] },
+				{ id: 'ok', type: 'helper' },
+				{ id: 'refused', type: 'helper' },
+			], credentials(erp));
+			const ok = [];
+			const refused = [];
+			const errors = [];
+			helper.getNode('ok').on('input', (msg) => ok.push(msg));
+			helper.getNode('refused').on('input', (msg) => refused.push(msg));
+			const node = helper.getNode('c1');
+			node.on('call:error', (call) => errors.push(call.args[0]));
+			node.receive({ payload: 'ec_token1' });
+			node.receive({ payload: 'ec_token2' });
+			node.receive({ payload: 'ec_token3' });
+			await waitFor(() => ok.length === 1 && refused.length === 1 && errors.length === 1);
+			assert.strictEqual(ok[0].action, 'clock_in');
+			assert.deepStrictEqual(ok[0].person, { identifier: 'ec_token1', id: 3, name: 'Erika Mustermann' });
+			assert.strictEqual(refused[0].payload.reason, 'scanned_too_often');
+			assert.match(String(errors[0].message || errors[0]), /HTTP 500/);
+		});
+
+		it('needs a list and a credential', async function () {
+			erp = await startErpMock({});
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 'c1', type: 'inwendo-erp-check-in', server: 'server', mode: 'attendanceList', listId: '', wires: [['ok'], ['refused']] },
+				{ id: 'ok', type: 'helper' },
+				{ id: 'refused', type: 'helper' },
+			], credentials(erp));
+			const errors = [];
+			const node = helper.getNode('c1');
+			node.on('call:error', (call) => errors.push(call.args[0]));
+			node.receive({ payload: '04A1' });
+			node.receive({ payload: {} });
+			await waitFor(() => errors.length === 2);
+			const messages = errors.map((error) => String(error.message || error)).join('|');
+			assert.match(messages, /Attendance list id missing/);
+			assert.match(messages, /card number or QR code/);
+			assert.strictEqual(erp.requests.length, 0);
 		});
 	});
 });
