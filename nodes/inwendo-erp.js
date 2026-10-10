@@ -1,6 +1,7 @@
 'use strict';
 
-const { RESOURCES, OPERATIONS, LOCK_OPERATIONS, wrapBody } = require('./lib/resources');
+const { RESOURCES, OPERATIONS, LOCK_OPERATIONS, wrapBody, operationsOf, needsId, needsParent, pathOf } = require('./lib/resources');
+const { featureDisabledSetting, featureDisabledText } = require('./lib/erp-client');
 
 const GENERIC = 'genericRequest';
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
@@ -29,8 +30,16 @@ module.exports = function (RED) {
 				send(msg);
 				done();
 			} catch (error) {
-				node.status({ fill: 'red', shape: 'ring', text: error.erpCode ? `error ${error.erpCode}` : 'error' });
+				const disabled = featureDisabledSetting(error);
 				msg.error = { message: error.message, statusCode: error.statusCode, erpCode: error.erpCode, erpDetails: error.erpDetails };
+				if (disabled) {
+					// the function is switched off in the ERP settings: a clear hint instead of an error code
+					msg.error.featureDisabled = disabled;
+					node.status({ fill: 'red', shape: 'ring', text: featureDisabledText(disabled) });
+					done(new Error(featureDisabledText(disabled)));
+					return;
+				}
+				node.status({ fill: 'red', shape: 'ring', text: error.erpCode ? `error ${error.erpCode}` : 'error' });
 				done(error);
 			}
 		});
@@ -69,16 +78,36 @@ async function execute(client, config, msg) {
 	if (!OPERATIONS.includes(operation)) {
 		throw new Error(`Unknown operation: ${operation}`);
 	}
+	if (!operationsOf(resource).includes(operation)) {
+		throw new Error(`${definition.label} does not support ${operation}`);
+	}
 	const id = pick(msg.id, config.entityId);
-	const needsId = operation !== 'getAll' && operation !== 'create';
-	if (needsId && (id === undefined || id === null || String(id).trim() === '')) {
+	if (needsId(resource, operation) && isBlank(id)) {
 		throw new Error(`${definition.label}: ${operation} needs an id (node setting or msg.id)`);
 	}
-	const path = needsId ? `${definition.path}/${encodeURIComponent(String(id).trim())}` : definition.path;
+	const parentId = pick(msg.parentId, config.parentId);
+	if (needsParent(resource, operation) && isBlank(parentId)) {
+		throw new Error(`${definition.label}: ${operation} needs the ${definition.parent.label} (node setting or msg.parentId)`);
+	}
+	const path = pathOf(resource, operation, { id, parentId });
+
+	const action = definition.actions && definition.actions[operation];
+	if (action) {
+		return { payload: await executeAction(client, resource, action, { id, msg, path }) };
+	}
 
 	switch (operation) {
-		case 'get':
+		case 'get': {
+			if (definition.getByListFilter) {
+				const items = await client.request('GET', definition.path, { qs: { ...(isObject(msg.query) ? msg.query : {}), id: String(id).trim() } });
+				const item = Array.isArray(items) ? items.find((entry) => entry && String(entry.id) === String(id).trim()) : null;
+				if (!item) {
+					throw new Error(`${definition.label} ${id} not found`);
+				}
+				return { payload: item };
+			}
 			return { payload: await client.request('GET', path, { qs: msg.query }) };
+		}
 		case 'getAll': {
 			const qs = { ...(isObject(msg.query) ? msg.query : {}) };
 			const searchString = pick(msg.searchString, config.searchString);
@@ -86,13 +115,13 @@ async function execute(client, config, msg) {
 				qs.searchString = searchString;
 			}
 			if (config.returnAll === true || msg.returnAll === true) {
-				return { payload: await client.requestAllItems(definition.path, qs) };
+				return { payload: await client.requestAllItems(path, qs) };
 			}
 			// the ERP only honours pageSize together with a (0-based) page
 			const limit = Math.max(1, parseInt(pick(msg.limit, config.limit), 10) || 50);
 			qs.page = qs.page !== undefined ? qs.page : '0';
 			qs.pageSize = String(limit);
-			const items = await client.request('GET', definition.path, { qs });
+			const items = await client.request('GET', path, { qs });
 			return { payload: Array.isArray(items) ? items.slice(0, limit) : items };
 		}
 		case 'create':
@@ -127,6 +156,33 @@ async function execute(client, config, msg) {
 			return { payload: await client.request('POST', `${path}/${operation}`, { body: {} }) };
 		}
 	}
+}
+
+/**
+ * Further operations of a resource (inventory loan return, clock in, usage counter value, ...).
+ */
+async function executeAction(client, resource, action, { id, msg, path }) {
+	const qs = { ...(isObject(msg.query) ? msg.query : {}) };
+	if (action.idQuery && !isBlank(id)) {
+		qs[action.idQuery] = String(id).trim();
+	}
+	let body;
+	if (typeof action.body === 'function') {
+		body = action.body(msg.payload);
+	} else if (action.body === 'payload') {
+		if (isObject(msg.payload) && Object.keys(msg.payload).length > 0) {
+			body = wrapBody(resource, msg.payload);
+		} else if (action.requiresBody) {
+			throw new Error(`${RESOURCES[resource].label}: the fields are missing in msg.payload`);
+		} else {
+			body = {};
+		}
+	}
+	return client.request(action.method, path, { body, qs });
+}
+
+function isBlank(value) {
+	return value === undefined || value === null || String(value).trim() === '';
 }
 
 function isObject(value) {

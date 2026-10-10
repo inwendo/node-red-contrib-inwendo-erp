@@ -3,7 +3,9 @@
 const assert = require('assert');
 const { ErpClient, InwendoErpError, buildUrl, featureDisabledSetting } = require('../nodes/lib/erp-client');
 const { NonceCache, sign, verifyPushCommand } = require('../nodes/lib/lock-protocol');
-const { wrapBody } = require('../nodes/lib/resources');
+const fs = require('fs');
+const path = require('path');
+const { RESOURCES, wrapBody, operationsOf, needsId, pathOf, counterValueBody } = require('../nodes/lib/resources');
 const { matches } = require('../nodes/inwendo-erp-trigger');
 const { credentialOf } = require('../nodes/inwendo-erp-access-check');
 const { startErpMock } = require('./helpers');
@@ -115,6 +117,45 @@ describe('helpers', function () {
 		assert.deepStrictEqual(wrapBody('company', { companyName: 'ACME' }), { crmcompany: { companyName: 'ACME' } });
 		assert.deepStrictEqual(wrapBody('company', { crmcompany: { companyName: 'ACME' } }), { crmcompany: { companyName: 'ACME' } });
 		assert.deepStrictEqual(wrapBody('booking', { name: 'x' }), { data: { name: 'x' } });
+	});
+
+	it('builds the paths of the resources', function () {
+		assert.strictEqual(pathOf('attendanceListEntry', 'getAll', { parentId: 9 }), '/api/event/attendancelist/9/entries');
+		assert.strictEqual(pathOf('attendanceListEntry', 'create', { parentId: 9 }), '/api/event/attendancelist/9/entry');
+		assert.strictEqual(pathOf('attendanceListEntry', 'update', { id: 31 }), '/api/event/attendancelist/31/entry');
+		assert.strictEqual(pathOf('inventoryLoan', 'returnLoan', { id: 4 }), '/api/event/inventory_loan/4/return');
+		assert.strictEqual(pathOf('inventoryLoan', 'stock', {}), '/api/event/inventory_loan_stock');
+		assert.strictEqual(pathOf('inventoryLoan', 'availability', { id: 7 }), '/api/event/inventory_loan_availability/7');
+		assert.strictEqual(pathOf('shiftPlanEntry', 'clockOut', { id: 5 }), '/api/time/shift_plan_entry/5/clock_out');
+		assert.strictEqual(pathOf('usageCounter', 'setValue', { id: 3 }), '/api/event/base_bookable_usage_counter/3');
+		assert.strictEqual(pathOf('occupancy', 'getOccupancy', {}), '/api/event/bookable_occupancy');
+		assert.strictEqual(pathOf('company', 'get', { id: ' 5 ' }), '/api/crm/crmcompanies/5');
+		assert.strictEqual(needsId('occupancy', 'getOccupancy'), false);
+		assert.strictEqual(needsId('inventoryLoan', 'stock'), false);
+		assert.strictEqual(needsId('userNotification', 'markRead'), true);
+	});
+
+	it('reads the usage counter value', function () {
+		assert.deepStrictEqual(counterValueBody(1240.2), { data: { counterValue: 1240.2 } });
+		assert.deepStrictEqual(counterValueBody('1240,5'), { data: { counterValue: 1240.5 } });
+		assert.deepStrictEqual(counterValueBody({ value: 7 }), { data: { counterValue: 7 } });
+		assert.throws(() => counterValueBody('abc'), /needs the reading/);
+		assert.throws(() => counterValueBody(''), /needs the reading/);
+	});
+
+	it('offers the same resources and operations in the editor', function () {
+		const html = fs.readFileSync(path.join(__dirname, '../nodes/inwendo-erp.html'), 'utf8');
+		const block = html.slice(html.indexOf('const RESOURCES = {'), html.indexOf('const OPERATIONS = {'));
+		const editor = Function(`'use strict'; ${block.replace('const RESOURCES =', 'return')}`)();
+		assert.deepStrictEqual(Object.keys(editor).sort(), Object.keys(RESOURCES).sort());
+		for (const [resource, entry] of Object.entries(editor)) {
+			assert.strictEqual(entry[0], RESOURCES[resource].label, resource);
+			assert.deepStrictEqual(entry[1], operationsOf(resource), resource);
+			const withoutId = entry[2] || ['getAll', 'create'];
+			for (const operation of entry[1]) {
+				assert.strictEqual(!withoutId.includes(operation), needsId(resource, operation), `${resource} ${operation}`);
+			}
+		}
 	});
 
 	it('filters trigger events like the n8n trigger', function () {

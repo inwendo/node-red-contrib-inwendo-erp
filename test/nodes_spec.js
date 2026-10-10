@@ -150,6 +150,103 @@ describe('inwendo erp nodes', function () {
 		});
 	});
 
+	describe('inwendo-erp: more resources', function () {
+		async function loadErpNode(routes, nodeConfig) {
+			erp = await startErpMock(routes);
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 'n1', type: 'inwendo-erp', server: 'server', wires: [['out']], ...nodeConfig },
+				{ id: 'out', type: 'helper' },
+			], credentials(erp));
+			return helper.getNode('n1');
+		}
+
+		function request(node, msg) {
+			const out = helper.getNode('out');
+			out.removeAllListeners('input');
+			const received = new Promise((resolve) => out.on('input', resolve));
+			node.receive(msg);
+			return received;
+		}
+
+		it('reads and writes attendance list entries of a list', async function () {
+			const node = await loadErpNode({
+				'GET /api/event/attendancelist/9/entries': () => ({ body: [{ id: 31 }] }),
+				'POST /api/event/attendancelist/9/entry': (req) => ({ body: { id: 32, ...req.body.data } }),
+				'PATCH /api/event/attendancelist/32/entry': () => ({ body: { id: 32 } }),
+			}, { resource: 'attendanceListEntry', operation: 'getAll', parentId: '9', limit: 10 });
+
+			assert.deepStrictEqual((await request(node, {})).payload, [{ id: 31 }]);
+			await request(node, { operation: 'create', payload: { name: 'Gast' } });
+			assert.deepStrictEqual(erp.requests[1].body, { data: { name: 'Gast' } });
+			await request(node, { operation: 'update', id: 32, payload: { end: '2026-10-11 19:00' } });
+			assert.strictEqual(erp.requests[2].method, 'PATCH');
+		});
+
+		it('returns inventory loans, sets counter values and clocks in', async function () {
+			const node = await loadErpNode({
+				'PATCH /api/event/inventory_loan/4/return': () => ({ body: { id: 4, state: 'RETURNED' } }),
+				'GET /api/event/inventory_loan_availability/7': (req) => ({ body: { quantity: 3, used: 1, available: 2, query: req.query } }),
+				'PATCH /api/event/base_bookable_usage_counter/3': () => ({ body: { id: 3, counter_value: 1240.2 } }),
+				'POST /api/time/shift_plan_entry/5/clock_in': () => ({ body: { id: 99, start: '2026-10-11T08:00:00+02:00' } }),
+				'GET /api/notification/user_notification': () => ({ body: [{ id: 6, read: false }] }),
+				'PUT /api/notification/user_notification/6': () => ({ body: { id: 6, read: true } }),
+			}, { resource: 'inventoryLoan', operation: 'returnLoan' });
+
+			assert.strictEqual((await request(node, { id: 4, payload: { condition: 'ok', retained_amount: 0 } })).payload.state, 'RETURNED');
+			assert.deepStrictEqual(erp.requests[0].body, { data: { condition: 'ok', retained_amount: 0 } });
+
+			const availability = await request(node, { operation: 'availability', id: 7, query: { start: '2026-10-11 10:00', end: '2026-10-11 12:00' } });
+			assert.strictEqual(availability.payload.available, 2);
+			assert.deepStrictEqual(availability.payload.query, { start: '2026-10-11 10:00', end: '2026-10-11 12:00' });
+
+			await request(node, { resource: 'usageCounter', operation: 'setValue', id: 3, payload: 1240.2 });
+			assert.deepStrictEqual(erp.requests[2].body, { data: { counterValue: 1240.2 } });
+
+			assert.strictEqual((await request(node, { resource: 'shiftPlanEntry', operation: 'clockIn', id: 5 })).payload.id, 99);
+
+			assert.deepStrictEqual((await request(node, { resource: 'userNotification', operation: 'get', id: 6 })).payload, { id: 6, read: false });
+			assert.strictEqual(erp.requests[4].query.id, '6');
+			await request(node, { resource: 'userNotification', operation: 'markRead', id: 6 });
+			assert.deepStrictEqual(erp.requests[5].body, { data: { read: true } });
+		});
+
+		it('reads the occupancy and shows a function switched off in the ERP', async function () {
+			let enabled = true;
+			const node = await loadErpNode({
+				'GET /api/event/bookable_occupancy': (req) => (enabled
+					? { body: { generated_at: 'now', bookables: [{ id: Number(req.query.bookable), occupied: true }] } }
+					: { status: 400, headers: { 'X-IW-ERROR-CODE': '404', 'X-IW-ERROR-JSON': '["feature disabled: integration_occupancy_api_enabled"]' } }),
+			}, { resource: 'occupancy', operation: 'getOccupancy', entityId: '7' });
+
+			assert.strictEqual((await request(node, {})).payload.bookables[0].occupied, true);
+			assert.strictEqual(erp.requests[0].query.bookable, '7');
+
+			enabled = false;
+			const errors = [];
+			const statuses = [];
+			node.on('call:error', (call) => errors.push(call.args[0]));
+			node.on('call:status', (call) => statuses.push(call.args[0]));
+			node.receive({});
+			await waitFor(() => errors.length === 1);
+			assert.match(String(errors[0].message || errors[0]), /Funktion im ERP deaktiviert: integration_occupancy_api_enabled/);
+			assert.deepStrictEqual(statuses[statuses.length - 1], { fill: 'red', shape: 'ring', text: 'Funktion im ERP deaktiviert: integration_occupancy_api_enabled' });
+		});
+
+		it('rejects operations a resource does not offer', async function () {
+			const node = await loadErpNode({}, { resource: 'occupancy', operation: 'getOccupancy' });
+			const errors = [];
+			node.on('call:error', (call) => errors.push(call.args[0]));
+			node.receive({ operation: 'create', payload: { a: 1 } });
+			node.receive({ resource: 'attendanceListEntry', operation: 'getAll' });
+			await waitFor(() => errors.length === 2);
+			const messages = errors.map((error) => String(error.message || error)).join('|');
+			assert.match(messages, /Occupancy does not support create/);
+			assert.match(messages, /needs the Attendance list ID/);
+			assert.strictEqual(erp.requests.length, 0);
+		});
+	});
+
 	describe('inwendo-erp-trigger', function () {
 		it('registers its webhook and passes matching events with the right token', async function () {
 			erp = await startErpMock({ 'POST /api/nodered/webhook': () => ({ body: { status: 'registered', webhook_id: 3 } }) });
