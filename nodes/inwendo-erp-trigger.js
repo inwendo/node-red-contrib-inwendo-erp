@@ -1,13 +1,13 @@
 'use strict';
 
-const crypto = require('crypto');
-const { readRawBody, publicUrl, removeRoute } = require('./lib/http');
+const { createWebhookEndpoint } = require('./lib/webhook-endpoint');
 
 module.exports = function (RED) {
 	/**
 	 * Starts a flow when an ERP entity is created, updated or deleted (like the n8n trigger). On deploy
 	 * the node registers its webhook at /api/nodered/webhook; when the node is removed, it removes it.
-	 * The ERP must reach Node-RED: the public base URL is the https address of this Node-RED.
+	 * Delivery: https (the ERP calls the public https URL of this Node-RED) or the ERP's MQTT broker
+	 * (only outgoing connections, ERP setting integration_mqtt_trigger_enabled).
 	 */
 	function InwendoErpTriggerNode(config) {
 		RED.nodes.createNode(this, config);
@@ -15,77 +15,29 @@ module.exports = function (RED) {
 		const server = RED.nodes.getNode(config.server);
 		const entityType = config.entityType || 'all';
 		const action = config.action || 'all';
-		const path = `/inwendo-erp/webhook/${node.id}`;
-		// a fresh token for every start: the registration is idempotent and updates it in place
-		const token = crypto.randomBytes(24).toString('hex');
-		const webhookUrl = config.publicUrl ? publicUrl(config.publicUrl, RED.settings.httpNodeRoot, path) : null;
 
-		const handler = async (req, res) => {
-			if (!timingSafeEqualString(String(req.headers['x-iw-webhook-token'] || ''), token)) {
-				res.status(401).send('Unauthorized');
-				return;
-			}
-			let body;
-			try {
-				const raw = await readRawBody(req);
-				body = raw ? JSON.parse(raw) : {};
-			} catch (error) {
-				res.status(400).send('Invalid JSON');
-				return;
-			}
-			res.status(200).send('OK');
-
-			if (!matches(body, entityType, action)) {
-				return;
-			}
-			node.send({
-				payload: body,
-				topic: `${body.iw_entity_short_class || ''}/${body.iw_action || ''}`,
-				entityType: body.iw_entity_short_class,
-				action: body.iw_action,
-			});
-		};
-		RED.httpNode.post(path, handler);
-
-		async function register() {
-			if (!server) {
-				node.status({ fill: 'red', shape: 'ring', text: 'no ERP connection' });
-				return;
-			}
-			if (!webhookUrl || !/^https:\/\//i.test(webhookUrl)) {
-				node.status({ fill: 'red', shape: 'ring', text: 'public https URL missing' });
-				node.error('The ERP needs the public https:// base URL of this Node-RED to call the webhook');
-				return;
-			}
-			try {
-				await server.client.request('POST', '/api/nodered/webhook', {
-					body: {
-						webhook_url: webhookUrl,
-						reference_class_name: entityType === 'all' ? null : entityType,
-						database_action: action === 'all' ? null : action,
-						webhook_token: token,
-					},
-				});
-				node.status({ fill: 'green', shape: 'dot', text: 'registered' });
-			} catch (error) {
-				node.status({ fill: 'red', shape: 'ring', text: 'registration failed' });
-				node.error(`Webhook registration failed: ${error.message}`);
-			}
-		}
-
-		register();
-
-		node.on('close', async (removed, done) => {
-			removeRoute(RED.httpNode, path, 'post');
-			if (removed && server && webhookUrl) {
-				try {
-					await server.client.request('DELETE', '/api/nodered/webhook', { body: { webhook_url: webhookUrl } });
-				} catch (error) {
-					node.warn(`Webhook could not be removed from the ERP: ${error.message}`);
+		const endpoint = createWebhookEndpoint(RED, node, {
+			server,
+			delivery: config.delivery,
+			publicUrl: config.publicUrl,
+			instanceId: config.instanceId,
+			referenceClassName: entityType === 'all' ? null : entityType,
+			databaseAction: action === 'all' ? null : action,
+			onEvent: (body) => {
+				if (!matches(body, entityType, action)) {
+					return;
 				}
-			}
-			done();
+				node.send({
+					payload: body,
+					topic: `${body.iw_entity_short_class || ''}/${body.iw_action || ''}`,
+					entityType: body.iw_entity_short_class,
+					action: body.iw_action,
+					// summary of smart lock log / check-in events (the ERP sends no entity data for them)
+					webhookData: body.webhook_data,
+				});
+			},
 		});
+		node.on('close', (removed, done) => endpoint.close(removed).then(() => done(), () => done()));
 	}
 
 	RED.nodes.registerType('inwendo-erp-trigger', InwendoErpTriggerNode);
@@ -103,12 +55,6 @@ function matches(body, entityType, action) {
 		}
 	}
 	return action === 'all' || body.iw_action === action;
-}
-
-function timingSafeEqualString(a, b) {
-	const left = Buffer.from(a);
-	const right = Buffer.from(b);
-	return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
 module.exports.matches = matches;

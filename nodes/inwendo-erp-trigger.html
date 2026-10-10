@@ -1,5 +1,11 @@
 <script type="text/javascript">
 	(function () {
+		function randomHex(bytes) {
+			const values = new Uint8Array(bytes);
+			window.crypto.getRandomValues(values);
+			return Array.from(values, (value) => value.toString(16).padStart(2, '0')).join('');
+		}
+
 		const ENTITY_TYPES = [
 			['all', 'All'],
 			['BaseBooking', 'Booking'],
@@ -14,6 +20,19 @@
 			['SmartLockLog', 'Smart Lock Log'],
 			['CustomerTicket', 'Ticket'],
 			['TimeEntry', 'Time Entry'],
+			['AttendanceList', 'Attendance List'],
+			['AttendanceListEntry', 'Attendance List Entry (check-in)'],
+			['BaseBookable', 'Bookable'],
+			['BaseBookableUsageCounter', 'Usage Counter'],
+			['BaseBookingRealUsage', 'Booking Real Usage'],
+			['EventBookingSubstitution', 'Booking Substitution'],
+			['EventInventoryLoan', 'Inventory Loan'],
+			['MembershipPauseRequest', 'Membership Pause Request'],
+			['ShiftExchangeRequest', 'Shift Exchange Request'],
+			['ShiftPlanEntry', 'Shift Plan Entry'],
+			['SmartLock', 'Smart Lock'],
+			['UserNotification', 'Notification'],
+			['WorkTimeEntry', 'Work Time Entry'],
 		];
 
 		RED.nodes.registerType('inwendo-erp-trigger', {
@@ -24,7 +43,15 @@
 				server: { value: '', type: 'inwendo-erp-config', required: true },
 				entityType: { value: 'all' },
 				action: { value: 'all' },
-				publicUrl: { value: '', required: true, validate: RED.validators.regex(/^https:\/\/.+/i) },
+				delivery: { value: 'https' },
+				publicUrl: {
+					value: '',
+					validate: function (value) {
+						const delivery = $('#node-input-delivery').length ? $('#node-input-delivery').val() : this.delivery;
+						return delivery === 'mqtt' || /^https:\/\/.+/i.test(value || '');
+					},
+				},
+				instanceId: { value: '', validate: RED.validators.regex(/^([A-Za-z0-9_-]{8,64})?$/) },
 			},
 			inputs: 0,
 			outputs: 1,
@@ -38,6 +65,13 @@
 				const select = $('#node-input-entityType');
 				ENTITY_TYPES.forEach((entry) => select.append($('<option>').val(entry[0]).text(entry[1])));
 				select.val(this.entityType || 'all');
+				// identifies the MQTT delivery of this trigger in the ERP: created once, kept in the flow
+				if (!this.instanceId) {
+					$('#node-input-instanceId').val('nr-trg-' + randomHex(10));
+				}
+				$('#node-input-delivery').on('change', function () {
+					$('.inwendo-erp-trigger-https').toggle($(this).val() !== 'mqtt');
+				}).trigger('change');
 			},
 		});
 	})();
@@ -66,12 +100,22 @@
 		</select>
 	</div>
 	<div class="form-row">
+		<label for="node-input-delivery"><i class="fa fa-exchange"></i> Delivery</label>
+		<select id="node-input-delivery">
+			<option value="https">HTTPS webhook (Node-RED reachable from the internet)</option>
+			<option value="mqtt">ERP MQTT broker (works behind NAT)</option>
+		</select>
+	</div>
+	<div class="form-row inwendo-erp-trigger-https">
 		<label for="node-input-publicUrl"><i class="fa fa-globe"></i> Public URL</label>
 		<input type="text" id="node-input-publicUrl" placeholder="https://nodered.example.com" />
 	</div>
+	<input type="hidden" id="node-input-instanceId" />
 	<div class="form-tips">
-		The ERP calls <code>&lt;Public URL&gt;/inwendo-erp/webhook/&lt;node id&gt;</code> (below <code>httpNodeRoot</code>).
-		It must be <b>https</b> and reachable from the internet. The token needs <b>Webhook / Write</b>.
+		<span class="inwendo-erp-trigger-https">The ERP calls <code>&lt;Public URL&gt;/inwendo-erp/webhook/&lt;node id&gt;</code> (below <code>httpNodeRoot</code>).
+		It must be <b>https</b> and reachable from the internet.</span>
+		With the <b>ERP MQTT broker</b> Node-RED only connects out (ERP setting <code>integration_mqtt_trigger_enabled</code>).
+		The token needs <b>Webhook / Write</b>.
 	</div>
 </script>
 
@@ -83,6 +127,9 @@
 		<dd>The webhook body of the ERP (<code>iw_action</code>, <code>iw_entity_class</code>, <code>iw_entity_short_class</code>, entity data).</dd>
 		<dt>topic <span class="property-type">string</span></dt>
 		<dd><code>&lt;entity&gt;/&lt;action&gt;</code></dd>
+		<dt class="optional">webhookData <span class="property-type">object</span></dt>
+		<dd>Summary the ERP sends for smart lock log (<code>type: "access"</code>: lock, action, success, person) and
+			attendance list entry events (<code>type: "check_in"</code>: list, person, <code>checked_in</code>) instead of the entity data.</dd>
 	</dl>
 	<h3>Details</h3>
 	<p>
@@ -90,4 +137,11 @@
 		the <code>X-IW-Webhook-Token</code> header of every call. Removing the node removes the webhook. Changes that Node-RED makes
 		itself through the <i>inwendo erp</i> node are not reported back.
 	</p>
+	<p>
+		<b>Delivery over the ERP MQTT broker</b>: the registration returns access to the ERP's broker (websocket over TLS, read
+		access to the topic of this trigger only); the node subscribes and registers again every 24 hours and before the access
+		runs out. No public URL needed. When the ERP setting <code>integration_mqtt_trigger_enabled</code> is off, the status shows
+		<i>Funktion im ERP deaktiviert: integration_mqtt_trigger_enabled</i>.
+	</p>
+	<p>For booking start / end events use the <i>inwendo erp booking schedule</i> node.</p>
 </script>

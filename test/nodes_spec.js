@@ -274,6 +274,75 @@ describe('inwendo erp nodes', function () {
 		});
 	});
 
+	describe('inwendo-erp-trigger over the ERP MQTT broker', function () {
+		it('registers with delivery mqtt, receives the events on the topic and unregisters', async function () {
+			broker = await startMqttBroker();
+			const topic = 'erp.example.com/nodered/x/events';
+			erp = await startErpMock({
+				'POST /api/nodered/webhook': () => ({
+					body: {
+						status: 'registered', webhook_id: 5,
+						mqtt: { url: broker.url, username: 'nodered@erp', password: 'mqtt-jwt', client_id: 'erp_trigger', topic, valid_until: new Date(Date.now() + 30 * 86400000).toISOString() },
+					},
+				}),
+				'DELETE /api/nodered/webhook': () => ({ body: { status: 'unregistered', count: 1 } }),
+			});
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 't1', type: 'inwendo-erp-trigger', server: 'server', entityType: 'SmartLockLog', action: 'create', delivery: 'mqtt', instanceId: 'nr-trg-abcdef', publicUrl: '', wires: [['out']] },
+				{ id: 'out', type: 'helper' },
+			], credentials(erp));
+			const statuses = [];
+			helper.getNode('t1').on('call:status', (call) => statuses.push(call.args[0]));
+			await waitFor(() => broker.aedes.connectedClients === 1);
+			await waitFor(() => statuses.some((status) => status.text === 'connected (mqtt)'));
+
+			const registration = erp.requests[0].body;
+			assert.strictEqual(registration.delivery, 'mqtt');
+			assert.match(registration.instance_id, /^[A-Za-z0-9_-]{8,64}$/);
+			assert.strictEqual(registration.webhook_url, undefined);
+			assert.strictEqual(registration.reference_class_name, 'SmartLockLog');
+			assert.strictEqual(registration.database_action, 'create');
+
+			const received = [];
+			helper.getNode('out').on('input', (msg) => received.push(msg));
+			const webhookData = { type: 'access', smart_lock_id: 4, smart_lock_name: 'Haupteingang', action: 'unlock', success: true, person_id: 55, person_name: 'Max Mustermann', source: 'app', at: '2026-10-11T18:00:00+02:00' };
+			await broker.publish(topic, JSON.stringify({ iw_action: 'update', iw_entity_class: 'Inwendo\\EventBundle\\Entity\\SmartLockLog', iw_entity_short_class: 'smart_lock_log', iw_entity_id: 8 }));
+			await broker.publish(topic, 'no json');
+			await broker.publish(topic, JSON.stringify({ iw_action: 'create', iw_entity_class: 'Inwendo\\EventBundle\\Entity\\SmartLockLog', iw_entity_short_class: 'smart_lock_log', iw_entity_id: 9, webhook_data: webhookData }));
+			await waitFor(() => received.length === 1);
+			assert.strictEqual(received[0].payload.iw_entity_id, 9);
+			assert.deepStrictEqual(received[0].webhookData, webhookData);
+			assert.strictEqual(received[0].topic, 'smart_lock_log/create');
+
+			await helper.getNode('t1').close(true);
+			const removal = erp.requests.find((request) => request.method === 'DELETE');
+			assert.deepStrictEqual(removal.body, { instance_id: registration.instance_id });
+		});
+
+		it('shows a trigger delivery switched off in the ERP', async function () {
+			erp = await startErpMock({
+				'POST /api/nodered/webhook': () => ({ status: 400, headers: { 'X-IW-ERROR-CODE': '404', 'X-IW-ERROR-JSON': '["feature disabled: integration_mqtt_trigger_enabled"]' } }),
+			});
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 't1', type: 'inwendo-erp-trigger', server: 'server', entityType: 'all', action: 'all', delivery: 'mqtt', wires: [['out']] },
+				{ id: 'out', type: 'helper' },
+			], credentials(erp));
+			const node = helper.getNode('t1');
+			const statuses = [];
+			const errors = [];
+			node.on('call:status', (call) => statuses.push(call.args[0]));
+			node.on('call:error', (call) => errors.push(call.args[0]));
+			await waitFor(() => statuses.length > 0);
+			assert.deepStrictEqual(statuses[statuses.length - 1], { fill: 'red', shape: 'ring', text: 'Funktion im ERP deaktiviert: integration_mqtt_trigger_enabled' });
+			assert.strictEqual(errors.length, 0);
+			// no retry storm: checked again the next day
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			assert.strictEqual(erp.requests.length, 1);
+		});
+	});
+
 	describe('lock bridge over MQTT', function () {
 		async function loadBridge(lockOptions = {}, extraNodes = []) {
 			broker = await startMqttBroker();

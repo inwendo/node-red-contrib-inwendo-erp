@@ -186,6 +186,20 @@ const TRIGGER_ENTITY_TYPES = {
 	SmartLockLog: 'Smart Lock Log',
 	CustomerTicket: 'Ticket',
 	TimeEntry: 'Time Entry',
+	// class names without namespace of ClassNameHelper (DataWarehouseBundle)
+	AttendanceList: 'Attendance List',
+	AttendanceListEntry: 'Attendance List Entry (check-in)',
+	BaseBookable: 'Bookable',
+	BaseBookableUsageCounter: 'Usage Counter',
+	BaseBookingRealUsage: 'Booking Real Usage',
+	EventBookingSubstitution: 'Booking Substitution',
+	EventInventoryLoan: 'Inventory Loan',
+	MembershipPauseRequest: 'Membership Pause Request',
+	ShiftExchangeRequest: 'Shift Exchange Request',
+	ShiftPlanEntry: 'Shift Plan Entry',
+	SmartLock: 'Smart Lock',
+	UserNotification: 'Notification',
+	WorkTimeEntry: 'Work Time Entry',
 };
 
 /**

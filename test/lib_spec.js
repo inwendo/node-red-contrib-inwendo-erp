@@ -7,6 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const { RESOURCES, wrapBody, operationsOf, needsId, pathOf, counterValueBody } = require('../nodes/lib/resources');
 const { matches } = require('../nodes/inwendo-erp-trigger');
+const { nextRegistrationDelay, triggerInstanceId, REREGISTER_MS } = require('../nodes/lib/webhook-registration');
+const { TRIGGER_ENTITY_TYPES } = require('../nodes/lib/resources');
 const { credentialOf } = require('../nodes/inwendo-erp-access-check');
 const { startErpMock } = require('./helpers');
 
@@ -163,6 +165,34 @@ describe('helpers', function () {
 		assert.strictEqual(matches(body, 'TimeEntry', 'all'), false);
 		assert.strictEqual(matches(body, 'WorkTimeEntry', 'update'), true);
 		assert.strictEqual(matches(body, 'all', 'create'), false);
+		// check-in events: the short class is "attendancelistentry", the class name decides
+		const checkIn = { iw_entity_class: 'Inwendo\\EventBundle\\Entity\\AttendanceListEntry', iw_entity_short_class: 'attendancelistentry', iw_action: 'create' };
+		assert.strictEqual(matches(checkIn, 'AttendanceListEntry', 'create'), true);
+		assert.strictEqual(matches(checkIn, 'AttendanceList', 'all'), false);
+	});
+
+	it('registers triggers again every day and before the MQTT access runs out', function () {
+		const now = Date.parse('2026-10-11T12:00:00Z');
+		assert.strictEqual(nextRegistrationDelay(null, now), REREGISTER_MS);
+		assert.strictEqual(nextRegistrationDelay('2026-11-10T12:00:00Z', now), REREGISTER_MS);
+		assert.strictEqual(nextRegistrationDelay('2026-10-11T15:00:00Z', now), 2 * 60 * 60 * 1000);
+		assert.strictEqual(nextRegistrationDelay('2026-10-11T12:00:00Z', now), 60 * 1000);
+		assert.strictEqual(nextRegistrationDelay('garbage', now), REREGISTER_MS);
+	});
+
+	it('gives every trigger its own MQTT instance id', function () {
+		const id = triggerInstanceId('nr-trg-0011', 'a1b2c3');
+		assert.match(id, /^[A-Za-z0-9_-]{8,64}$/);
+		assert.strictEqual(triggerInstanceId('nr-trg-0011', 'a1b2c3'), id);
+		assert.notStrictEqual(triggerInstanceId('nr-trg-0011', 'ffff'), id);
+		assert.notStrictEqual(triggerInstanceId('nr-trg-0022', 'a1b2c3'), id);
+	});
+
+	it('offers the trigger entity types in the editor', function () {
+		const html = fs.readFileSync(path.join(__dirname, '../nodes/inwendo-erp-trigger.html'), 'utf8');
+		const block = html.slice(html.indexOf('const ENTITY_TYPES = ['), html.indexOf('];', html.indexOf('const ENTITY_TYPES = [')) + 2);
+		const editor = Function(`'use strict'; ${block.replace('const ENTITY_TYPES =', 'return')}`)();
+		assert.deepStrictEqual(Object.fromEntries(editor), TRIGGER_ENTITY_TYPES);
 	});
 
 	it('cleans what readers send', function () {
