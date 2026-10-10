@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('assert');
-const { ErpClient, InwendoErpError, buildUrl } = require('../nodes/lib/erp-client');
+const { ErpClient, InwendoErpError, buildUrl, featureDisabledSetting } = require('../nodes/lib/erp-client');
 const { NonceCache, sign, verifyPushCommand } = require('../nodes/lib/lock-protocol');
 const { wrapBody } = require('../nodes/lib/resources');
 const { matches } = require('../nodes/inwendo-erp-trigger');
@@ -58,6 +58,21 @@ describe('erp client', function () {
 		assert.deepStrictEqual(await client.requestAllItems('/api/crm/crmpeople', { searchString: 'x' }), [{ id: 0 }, { id: 1 }, { id: 2 }]);
 		assert.strictEqual(erp.requests[0].query.withMaxPageNumber, 'nodered');
 		assert.strictEqual(erp.requests[0].query.searchString, 'x');
+	});
+
+	it('detects functions switched off in the ERP by the error headers', async function () {
+		erp = await startErpMock({
+			'GET /api/event/bookable_occupancy': () => ({ status: 400, headers: { 'X-IW-ERROR-CODE': '404', 'X-IW-ERROR-JSON': '["feature disabled: integration_occupancy_api_enabled"]' } }),
+			'GET /api/crm/tickets/3': () => ({ status: 400, headers: { 'X-IW-ERROR-CODE': '404', 'X-IW-ERROR-JSON': '["not found"]' } }),
+			'GET /api/event/inventory_loan': () => ({ status: 400, headers: { 'X-IW-ERROR-CODE': '1585', 'X-IW-ERROR-JSON': '{"message":"Inventory loans are switched off"}' } }),
+		});
+		const client = new ErpClient({ host: erp.host, apiToken: 'jwt-token' });
+		const errorOf = (path) => client.request('GET', path).then(() => null, (error) => error);
+
+		assert.strictEqual(featureDisabledSetting(await errorOf('/api/event/bookable_occupancy')), 'integration_occupancy_api_enabled');
+		assert.strictEqual(featureDisabledSetting(await errorOf('/api/crm/tickets/3')), null);
+		assert.strictEqual(featureDisabledSetting(await errorOf('/api/event/inventory_loan')), 'event_inventory_enabled');
+		assert.strictEqual(featureDisabledSetting(new Error('x')), null);
 	});
 
 	it('adds https to a host without scheme', function () {

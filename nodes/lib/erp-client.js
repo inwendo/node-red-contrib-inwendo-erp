@@ -63,6 +63,35 @@ function errorFromResponse(response, bodyText) {
 	});
 }
 
+/** Inventory loans have their own "switched off" error (setting event_inventory_enabled). */
+const INVENTORY_DISABLED_CODE = 1585;
+
+/**
+ * A function the ERP offers behind a setting that is switched off. The ERP answers HTTP 400 (its
+ * "soft" error) with X-IW-ERROR-CODE 404 and X-IW-ERROR-JSON ["feature disabled: <setting id>"];
+ * detected by the headers, not by the HTTP status.
+ *
+ * @returns {string|null} the id of the ERP setting, null for any other error
+ */
+function featureDisabledSetting(error) {
+	if (!error || typeof error !== 'object') {
+		return null;
+	}
+	if (error.erpCode === 404) {
+		const match = /feature disabled:\s*([A-Za-z0-9_.-]+)/i.exec(String(error.erpDetails || ''));
+		return match ? match[1] : null;
+	}
+	if (error.erpCode === INVENTORY_DISABLED_CODE) {
+		return 'event_inventory_enabled';
+	}
+	return null;
+}
+
+/** Status text of a node whose ERP function is switched off in the ERP settings. */
+function featureDisabledText(setting) {
+	return `Funktion im ERP deaktiviert: ${setting}`;
+}
+
 class ErpClient {
 	/**
 	 * @param {{host: string, apiToken: string, timeout?: number, fetch?: Function}} options
@@ -159,4 +188,4 @@ class ErpClient {
 	}
 }
 
-module.exports = { ErpClient, InwendoErpError, normalizeHost, buildUrl, TRIGGER_SOURCE };
+module.exports = { ErpClient, InwendoErpError, normalizeHost, buildUrl, featureDisabledSetting, featureDisabledText, TRIGGER_SOURCE };
