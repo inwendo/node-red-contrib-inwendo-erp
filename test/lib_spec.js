@@ -202,3 +202,30 @@ describe('helpers', function () {
 		assert.strictEqual(credentialOf({}), null);
 	});
 });
+
+describe('examples', function () {
+	const ownTypes = Object.keys(require('../package.json')['node-red'].nodes);
+	const coreTypes = ['tab', 'inject', 'debug', 'change', 'switch', 'trigger', 'mqtt out', 'mqtt-broker'];
+	const dir = path.join(__dirname, '../examples');
+
+	for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.json'))) {
+		it(`${file} is a valid flow of known nodes`, function () {
+			const flow = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+			const ids = new Set(flow.map((node) => node.id));
+			assert.strictEqual(ids.size, flow.length, 'unique ids');
+			for (const node of flow) {
+				assert.ok(ownTypes.includes(node.type) || coreTypes.includes(node.type), `${file}: unknown type ${node.type}`);
+				for (const output of node.wires || []) {
+					for (const target of output) {
+						assert.ok(ids.has(target), `${file}: wire to missing node ${target}`);
+					}
+				}
+				for (const reference of ['server', 'bridge', 'broker', 'z']) {
+					if (node[reference] && !(node.type === 'mqtt-broker' && reference === 'broker')) {
+						assert.ok(ids.has(node[reference]), `${file}: ${node.id}.${reference} missing`);
+					}
+				}
+			}
+		});
+	}
+});

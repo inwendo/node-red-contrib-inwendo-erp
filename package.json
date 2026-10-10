@@ -1,7 +1,7 @@
 {
 	"name": "node-red-contrib-inwendo-erp",
-	"version": "0.1.0",
-	"description": "Node-RED nodes for the inwendo ERP: API token login, ERP data, webhooks, smart locks and access checks for barcode / QR / RFID readers",
+	"version": "0.2.0",
+	"description": "Node-RED nodes for the inwendo ERP: API token login, ERP data, webhooks over https or MQTT, booking schedule, check-in, smart locks and access checks for barcode / QR / RFID readers",
 	"keywords": [
 		"node-red",
 		"inwendo",
@@ -9,7 +9,10 @@
 		"smart lock",
 		"access control",
 		"rfid",
-		"barcode"
+		"barcode",
+		"booking",
+		"check-in",
+		"mqtt"
 	],
 	"license": "MIT",
 	"homepage": "https://github.com/inwendo/node-red-contrib-inwendo-erp",
