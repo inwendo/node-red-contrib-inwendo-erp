@@ -139,6 +139,54 @@ IW_E2E_ERP_HOST=https://erp.example.com IW_E2E_ERP_TOKEN=<jwt> npm run test:e2e
 The E2E test needs a super admin token (scope event, *allow super admin functions*) and an ERP with
 MQTT configured; it registers a lock, syncs it, opens it through the ERP and checks a credential.
 
+## Release
+
+The package is built and published to npm by hand from an up-to-date `main`; the GitHub repository
+stays private. There is no build step: npm ships `nodes/`, `examples/`, `README.md`, `LICENSE` and
+`package.json` as they are.
+
+1. Start clean on the latest `main`:
+   ```bash
+   git checkout main && git pull
+   git status                  # nothing to commit
+   ```
+2. Check that everything passes:
+   ```bash
+   npm ci
+   npm run lint
+   npm test
+   ```
+3. Raise the version (skip this for the first release, `package.json` already says 0.1.0). This
+   updates `package.json` and `package-lock.json`, commits and tags `vX.Y.Z`:
+   ```bash
+   npm version patch           # bug fixes; minor for new features, major for breaking changes
+   ```
+4. Look at what will be published:
+   ```bash
+   npm pack --dry-run
+   ```
+5. Log in once per machine and check the account:
+   ```bash
+   npm login
+   npm whoami
+   ```
+6. Publish (npm asks for the two-factor code or opens the browser):
+   ```bash
+   npm publish --access public
+   ```
+7. Push the version commit and tag, then check the result:
+   ```bash
+   git push --follow-tags      # first release: git tag v0.1.0 && git push origin v0.1.0
+   npm view node-red-contrib-inwendo-erp version
+   ```
+8. First release only: add the package to the Node-RED flow library at
+   <https://flows.nodered.org/add/node>, so *Manage palette → Install* finds it. Later versions are
+   picked up there automatically.
+
+`.github/workflows/publish.yml` can publish the same way on a GitHub release, but only with an
+`NPM_TOKEN` repository secret that may publish directly (not a stage-only token) and with `main` as
+the default branch. Publishing by hand needs neither.
+
 ## License
 
 MIT
