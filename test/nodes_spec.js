@@ -13,6 +13,7 @@ const bridgeNode = require('../nodes/inwendo-erp-lock-bridge');
 const lockNode = require('../nodes/inwendo-erp-lock');
 const lockResultNode = require('../nodes/inwendo-erp-lock-result');
 const accessCheckNode = require('../nodes/inwendo-erp-access-check');
+const bookingScheduleNode = require('../nodes/inwendo-erp-booking-schedule');
 
 /** RED.httpNode of the test runtime: the routes of the trigger and the push bridge. */
 let httpNode = null;
@@ -20,7 +21,7 @@ function captureHttpNode(RED) {
 	httpNode = RED.httpNode;
 }
 
-const ALL_NODES = [captureHttpNode, configNode, erpNode, triggerNode, bridgeNode, lockNode, lockResultNode, accessCheckNode];
+const ALL_NODES = [captureHttpNode, configNode, erpNode, triggerNode, bridgeNode, lockNode, lockResultNode, accessCheckNode, bookingScheduleNode];
 const INSTANCE = 'nr-test-instance-1';
 const SECRET = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
 
@@ -340,6 +341,100 @@ describe('inwendo erp nodes', function () {
 			// no retry storm: checked again the next day
 			await new Promise((resolve) => setTimeout(resolve, 300));
 			assert.strictEqual(erp.requests.length, 1);
+		});
+	});
+
+	describe('inwendo-erp-booking-schedule', function () {
+		function timedEvent(type, overrides = {}) {
+			return {
+				iw_action: type,
+				iw_entity_class: 'Inwendo\\EventBundle\\Entity\\BaseBooking',
+				iw_entity_short_class: 'booking',
+				iw_entity_id: 123,
+				iw_timed_event: {
+					type, due_at: '2026-10-11T18:00:00+02:00', booking_id: 123, booking_title: 'Training U12',
+					start: '2026-10-11T18:00:00+02:00', end: '2026-10-11T19:30:00+02:00',
+					bookable_id: 7, bookable_name: 'Halle 1', location_id: 2, location_name: 'Sportzentrum',
+					participants: 14, pre_start_minutes: 30, post_end_minutes: 15, ...overrides,
+				},
+				data: { id: 123 },
+			};
+		}
+
+		it('registers for the timed events and passes those of its bookables', async function () {
+			erp = await startErpMock({ 'POST /api/nodered/webhook': () => ({ body: { status: 'registered', webhook_id: 4 } }) });
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 's1', type: 'inwendo-erp-booking-schedule', server: 'server', mode: 'erp', delivery: 'https', publicUrl: 'https://nodered.example.com', eventType: 'all', bookables: 'Halle 1', wires: [['out']] },
+				{ id: 'out', type: 'helper' },
+			], credentials(erp));
+			await waitFor(() => erp.requests.length === 1);
+			const registration = erp.requests[0].body;
+			assert.strictEqual(registration.database_action, 'booking_timed');
+			assert.strictEqual(registration.reference_class_name, 'BaseBooking');
+			assert.strictEqual(registration.webhook_url, 'https://nodered.example.com/inwendo-erp/webhook/s1');
+
+			const received = [];
+			helper.getNode('out').on('input', (msg) => received.push(msg));
+			const post = (body) => supertest(httpNode).post('/inwendo-erp/webhook/s1').set('X-IW-Webhook-Token', registration.webhook_token)
+				.set('Content-Type', 'application/json').send(JSON.stringify(body)).expect(200);
+			await post(timedEvent('booking_start', { bookable_id: 8, bookable_name: 'Halle 2' }));
+			await post({ iw_action: 'update', iw_entity_short_class: 'booking', data: {} });
+			await post(timedEvent('booking_pre_start'));
+			await waitFor(() => received.length === 1);
+			assert.strictEqual(received[0].topic, 'Halle 1/booking_pre_start');
+			assert.strictEqual(received[0].payload.participants, 14);
+			assert.strictEqual(received[0].eventType, 'booking_pre_start');
+			assert.deepStrictEqual(received[0].booking, { id: 123 });
+			assert.strictEqual(received[0].source, 'erp');
+		});
+
+		it('registers for one event type and shows when the ERP has the timed events switched off', async function () {
+			erp = await startErpMock({
+				'POST /api/nodered/webhook': () => ({ status: 400, headers: { 'X-IW-ERROR-CODE': '404', 'X-IW-ERROR-JSON': '["feature disabled: integration_booking_timed_events_enabled"]' } }),
+			});
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 's1', type: 'inwendo-erp-booking-schedule', server: 'server', mode: 'erp', delivery: 'mqtt', eventType: 'booking_end', wires: [['out']] },
+				{ id: 'out', type: 'helper' },
+			], credentials(erp));
+			const node = helper.getNode('s1');
+			const statuses = [];
+			node.on('call:status', (call) => statuses.push(call.args[0]));
+			await waitFor(() => statuses.length > 0);
+			assert.strictEqual(erp.requests[0].body.database_action, 'booking_end');
+			assert.strictEqual(erp.requests[0].body.delivery, 'mqtt');
+			assert.strictEqual(statuses[statuses.length - 1].text, 'Funktion im ERP deaktiviert: integration_booking_timed_events_enabled');
+		});
+
+		it('reads the bookings and sends the events itself (fallback)', async function () {
+			const start = new Date(Date.now() + 300);
+			const end = new Date(Date.now() + 600);
+			erp = await startErpMock({
+				'GET /api/event/base_booking': (req) => ({
+					body: Number(req.query.page) > 0 ? [] : [
+						{ id: 1, name: 'Training', start_time: start.toISOString(), end_time: end.toISOString(), deleted: false, baseBookable: { id: 7, name: 'Halle 1' }, baseLocation: { id: 2, name: 'Sportzentrum' } },
+						{ id: 2, name: 'Abgesagt', start_time: start.toISOString(), end_time: end.toISOString(), deleted: false, booking_status: 'FCS_CANCELLED_BY_BLOCKING', baseBookable: { id: 7, name: 'Halle 1' } },
+					],
+					headers: { 'X-IW-MAX-PAGES': '1' },
+				}),
+			});
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 's1', type: 'inwendo-erp-booking-schedule', server: 'server', mode: 'poll', eventType: 'all', bookables: '7', preStartMinutes: 0, postEndMinutes: 0, pollInterval: 5, wires: [['out']] },
+				{ id: 'out', type: 'helper' },
+			], credentials(erp));
+			const received = [];
+			helper.getNode('out').on('input', (msg) => received.push(msg));
+			await waitFor(() => received.length === 4);
+			assert.deepStrictEqual(received.map((msg) => msg.topic), ['Halle 1/booking_pre_start', 'Halle 1/booking_start', 'Halle 1/booking_end', 'Halle 1/booking_post_end']);
+			assert.strictEqual(received[1].payload.booking_id, 1);
+			assert.strictEqual(received[1].payload.location_name, 'Sportzentrum');
+			assert.strictEqual(received[1].booking.name, 'Training');
+			assert.strictEqual(received[1].source, 'poll');
+			const query = erp.requests[0].query;
+			assert.strictEqual(query.baseBookableIN, '7');
+			assert.match(query.startTimeCMP, /^lte,IW_DATE_TIME_\d+$/);
 		});
 	});
 

@@ -38,6 +38,7 @@
 			"inwendo-erp-config": "nodes/inwendo-erp-config.js",
 			"inwendo-erp": "nodes/inwendo-erp.js",
 			"inwendo-erp-trigger": "nodes/inwendo-erp-trigger.js",
+			"inwendo-erp-booking-schedule": "nodes/inwendo-erp-booking-schedule.js",
 			"inwendo-erp-lock-bridge": "nodes/inwendo-erp-lock-bridge.js",
 			"inwendo-erp-lock": "nodes/inwendo-erp-lock.js",
 			"inwendo-erp-lock-result": "nodes/inwendo-erp-lock-result.js",
