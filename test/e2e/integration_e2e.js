@@ -93,7 +93,8 @@ const NODES = [
 		it(`${type}: receives its events over the ERP MQTT broker`, async function () {
 			await helper.load(NODES, [
 				{ id: 'server', type: 'inwendo-erp-config', host: HOST },
-				{ id: 't1', type, server: 'server', delivery: 'mqtt', mode: 'erp', entityType: 'CRMCompany', action: 'update', eventType: 'all', instanceId: 'nr-trg-e2e', wires: [[]] },
+				{ id: 't1', type, server: 'server', delivery: 'mqtt', mode: 'erp', entityType: 'CRMCompany', action: 'update', eventType: 'all', instanceId: 'nr-trg-e2e', wires: [['out']] },
+				{ id: 'out', type: 'helper' },
 			], { server: { apiToken: TOKEN } });
 			const node = helper.getNode('t1');
 			const statuses = [];
@@ -103,6 +104,23 @@ const NODES = [
 				this.skip();
 			}
 			assert.strictEqual(last.text, 'connected (mqtt)');
+			if (type === 'inwendo-erp-trigger') {
+				// a change in the ERP reaches the flow: ERP queue -> ERP MQTT broker -> node
+				const sent = [];
+				helper.getNode('out').on('input', (msg) => sent.push(msg));
+				// changed like from the office: the ErpClient sends X-IW-Trigger-Source: nodered, and the
+				// ERP never reports a change back to the client that made it
+				const office = (method, path, body) => fetch(`${HOST}${path}`, {
+					method,
+					headers: { 'x-iw-jwt-token': TOKEN, 'Content-Type': 'application/json' },
+					body: JSON.stringify(body),
+				}).then((res) => res.json());
+				const company = await office('POST', '/api/crm/crmcompanies', { crmcompany: { companyName: `nr-trg-e2e ${Date.now()}` } });
+				await office('PATCH', `/api/crm/crmcompanies/${company.id}`, { crmcompany: { shortName: 'NRT' } });
+				const msg = await waitFor(() => sent.find((m) => m.payload.iw_entity_id === company.id), 30000);
+				assert.strictEqual(msg.action, 'update');
+				assert.strictEqual(msg.topic, `${msg.entityType}/update`);
+			}
 			await node.close(true);
 		});
 	}
