@@ -1,0 +1,9 @@
+[
+	{"id": "b2a0000000001001", "type": "tab", "label": "inwendo ERP: floodlight", "disabled": false, "info": "Switches the floodlight of the sports field on at the start of a booking and off after its end (lag time).\n\nThis flow uses 'Node-RED reads the bookings': works with every ERP, lead / lag time are set in the node. Replace the debug node with your relay (Shelly, GPIO, Modbus ...)."},
+	{"id": "b2a0000000001002", "type": "inwendo-erp-config", "name": "inwendo ERP", "host": "https://demo.iw-erp.de"},
+	{"id": "b2a0000000001003", "type": "inwendo-erp-booking-schedule", "z": "b2a0000000001001", "name": "Platz 1", "server": "b2a0000000001002", "eventType": "all", "bookables": "Platz 1", "mode": "poll", "delivery": "mqtt", "publicUrl": "", "instanceId": "", "preStartMinutes": 0, "postEndMinutes": 10, "pollInterval": 5, "x": 140, "y": 100, "wires": [["b2a0000000001004"]]},
+	{"id": "b2a0000000001004", "type": "switch", "z": "b2a0000000001001", "name": "start / post end", "property": "eventType", "propertyType": "msg", "rules": [{"t": "eq", "v": "booking_start", "vt": "str"}, {"t": "eq", "v": "booking_post_end", "vt": "str"}], "checkall": "true", "repair": false, "outputs": 2, "x": 340, "y": 100, "wires": [["b2a0000000001005"], ["b2a0000000001006"]]},
+	{"id": "b2a0000000001005", "type": "change", "z": "b2a0000000001001", "name": "on", "rules": [{"t": "set", "p": "payload", "pt": "msg", "to": "true", "tot": "bool"}], "x": 520, "y": 80, "wires": [["b2a0000000001007"]]},
+	{"id": "b2a0000000001006", "type": "change", "z": "b2a0000000001001", "name": "off", "rules": [{"t": "set", "p": "payload", "pt": "msg", "to": "false", "tot": "bool"}], "x": 520, "y": 120, "wires": [["b2a0000000001007"]]},
+	{"id": "b2a0000000001007", "type": "debug", "z": "b2a0000000001001", "name": "relay: floodlight", "active": true, "tosidebar": true, "console": false, "complete": "true", "targetType": "full", "x": 720, "y": 100, "wires": []}
+]

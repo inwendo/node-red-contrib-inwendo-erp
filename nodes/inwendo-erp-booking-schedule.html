@@ -1,0 +1,162 @@
+<script type="text/javascript">
+	(function () {
+		function randomHex(bytes) {
+			const values = new Uint8Array(bytes);
+			window.crypto.getRandomValues(values);
+			return Array.from(values, (value) => value.toString(16).padStart(2, '0')).join('');
+		}
+
+		const EVENT_TYPES = {
+			all: 'all events',
+			booking_pre_start: 'pre start',
+			booking_start: 'start',
+			booking_end: 'end',
+			booking_post_end: 'post end',
+		};
+
+		RED.nodes.registerType('inwendo-erp-booking-schedule', {
+			category: 'inwendo ERP',
+			color: '#7fb7df',
+			defaults: {
+				name: { value: '' },
+				server: { value: '', type: 'inwendo-erp-config', required: true },
+				eventType: { value: 'all' },
+				bookables: { value: '' },
+				mode: { value: 'erp' },
+				delivery: { value: 'mqtt' },
+				publicUrl: {
+					value: '',
+					validate: function (value) {
+						const mode = $('#node-input-mode').length ? $('#node-input-mode').val() : this.mode;
+						const delivery = $('#node-input-delivery').length ? $('#node-input-delivery').val() : this.delivery;
+						return mode === 'poll' || delivery === 'mqtt' || /^https:\/\/.+/i.test(value || '');
+					},
+				},
+				instanceId: { value: '', validate: RED.validators.regex(/^([A-Za-z0-9_-]{8,64})?$/) },
+				preStartMinutes: { value: 30, validate: RED.validators.number(true) },
+				postEndMinutes: { value: 15, validate: RED.validators.number(true) },
+				pollInterval: { value: 5, validate: RED.validators.number(true) },
+			},
+			inputs: 0,
+			outputs: 1,
+			icon: 'inwendo.png',
+			paletteLabel: 'inwendo erp booking schedule',
+			label: function () {
+				return this.name || 'booking ' + (EVENT_TYPES[this.eventType] || this.eventType) + (this.bookables ? ' ' + this.bookables : '');
+			},
+			oneditprepare: function () {
+				// identifies the MQTT delivery of this node in the ERP: created once, kept in the flow
+				if (!this.instanceId) {
+					$('#node-input-instanceId').val('nr-trg-' + randomHex(10));
+				}
+				function update() {
+					const poll = $('#node-input-mode').val() === 'poll';
+					$('.inwendo-erp-schedule-erp').toggle(!poll);
+					$('.inwendo-erp-schedule-poll').toggle(poll);
+					$('.inwendo-erp-schedule-https').toggle(!poll && $('#node-input-delivery').val() !== 'mqtt');
+				}
+				$('#node-input-mode, #node-input-delivery').on('change', update);
+				update();
+			},
+		});
+	})();
+</script>
+
+<script type="text/html" data-template-name="inwendo-erp-booking-schedule">
+	<div class="form-row">
+		<label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+		<input type="text" id="node-input-name" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-server"><i class="fa fa-server"></i> ERP</label>
+		<input type="text" id="node-input-server" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-eventType"><i class="fa fa-clock-o"></i> Event</label>
+		<select id="node-input-eventType">
+			<option value="all">All (pre start, start, end, post end)</option>
+			<option value="booking_pre_start">Pre start (lead time before the start)</option>
+			<option value="booking_start">Start</option>
+			<option value="booking_end">End</option>
+			<option value="booking_post_end">Post end (lag time after the end)</option>
+		</select>
+	</div>
+	<div class="form-row">
+		<label for="node-input-bookables"><i class="fa fa-building"></i> Bookables</label>
+		<input type="text" id="node-input-bookables" placeholder="all, or ids / names: 7, Halle 1" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-mode"><i class="fa fa-cogs"></i> Source</label>
+		<select id="node-input-mode">
+			<option value="erp">ERP sends the events (recommended)</option>
+			<option value="poll">Node-RED reads the bookings (fallback)</option>
+		</select>
+	</div>
+	<div class="form-row inwendo-erp-schedule-erp">
+		<label for="node-input-delivery"><i class="fa fa-exchange"></i> Delivery</label>
+		<select id="node-input-delivery">
+			<option value="mqtt">ERP MQTT broker (works behind NAT)</option>
+			<option value="https">HTTPS webhook (Node-RED reachable from the internet)</option>
+		</select>
+	</div>
+	<div class="form-row inwendo-erp-schedule-https">
+		<label for="node-input-publicUrl"><i class="fa fa-globe"></i> Public URL</label>
+		<input type="text" id="node-input-publicUrl" placeholder="https://nodered.example.com" />
+	</div>
+	<input type="hidden" id="node-input-instanceId" />
+	<div class="form-row inwendo-erp-schedule-poll">
+		<label for="node-input-preStartMinutes"><i class="fa fa-step-backward"></i> Lead time</label>
+		<input type="number" id="node-input-preStartMinutes" min="0" style="width: 80px" /> minutes before the start
+	</div>
+	<div class="form-row inwendo-erp-schedule-poll">
+		<label for="node-input-postEndMinutes"><i class="fa fa-step-forward"></i> Lag time</label>
+		<input type="number" id="node-input-postEndMinutes" min="0" style="width: 80px" /> minutes after the end
+	</div>
+	<div class="form-row inwendo-erp-schedule-poll">
+		<label for="node-input-pollInterval"><i class="fa fa-refresh"></i> Read every</label>
+		<input type="number" id="node-input-pollInterval" min="1" max="60" style="width: 80px" /> minutes
+	</div>
+	<div class="form-tips inwendo-erp-schedule-erp">
+		Needs the ERP setting <code>integration_booking_timed_events_enabled</code> (and for MQTT
+		<code>integration_mqtt_trigger_enabled</code>). Lead / lag time come from the ERP (per bookable or the ERP settings).
+		The token needs <b>Webhook / Write</b>.
+	</div>
+	<div class="form-tips inwendo-erp-schedule-poll">
+		Works with every ERP: the node reads the bookings (token scope <b>Event Booking / Read</b>) and sends the events itself.
+	</div>
+</script>
+
+<script type="text/html" data-help-name="inwendo-erp-booking-schedule">
+	<p>Sends a message before a booking starts, at its start, at its end and after it ended: preheat a hall, switch the floodlight on and off, unlock a door for the booking time.</p>
+	<h3>Outputs</h3>
+	<dl class="message-properties">
+		<dt>topic <span class="property-type">string</span></dt>
+		<dd><code>&lt;bookable name&gt;/&lt;event type&gt;</code>, e.g. <code>Halle 1/booking_start</code>.</dd>
+		<dt>payload <span class="property-type">object</span></dt>
+		<dd>The timed event: <code>type</code> (<code>booking_pre_start</code>, <code>booking_start</code>, <code>booking_end</code>,
+			<code>booking_post_end</code>), <code>due_at</code>, <code>booking_id</code>, <code>booking_title</code>, <code>start</code>,
+			<code>end</code>, <code>bookable_id</code>, <code>bookable_name</code>, <code>location_id</code>, <code>location_name</code>,
+			<code>participants</code>, <code>pre_start_minutes</code>, <code>post_end_minutes</code>.</dd>
+		<dt>eventType <span class="property-type">string</span></dt>
+		<dd>The type of the event.</dd>
+		<dt>booking <span class="property-type">object</span></dt>
+		<dd>The booking as the ERP serializes it.</dd>
+		<dt>source <span class="property-type">string</span></dt>
+		<dd><code>erp</code> or <code>poll</code>.</dd>
+	</dl>
+	<h3>Details</h3>
+	<p>
+		<b>ERP sends the events</b>: the node registers a trigger webhook for the timed booking events
+		(<code>database_action</code> <code>booking_timed</code> or one of the four types) and receives them over the ERP's MQTT
+		broker or as https webhook. The ERP checks every minute, an event can arrive 1-2 minutes late, never twice, cancelled
+		and deleted bookings are skipped. Lead / lag time: bookable addon data <code>automation_pre_start_minutes</code> /
+		<code>automation_post_end_minutes</code>, else the ERP settings (default 30 / 15 minutes). When the ERP setting is off
+		the status shows <i>Funktion im ERP deaktiviert: integration_booking_timed_events_enabled</i>; use the fallback then.
+	</p>
+	<p>
+		<b>Node-RED reads the bookings</b>: the node reads the bookings of the next minutes every few minutes
+		(<code>GET /api/event/base_booking</code>) and schedules the events with the lead / lag time of the node. Bookings that
+		move or are cancelled before an event are rescheduled or dropped. After a restart events up to 2 minutes late are sent.
+	</p>
+	<p><b>Bookables</b>: empty for all, or ids / names separated by commas.</p>
+</script>
