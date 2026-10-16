@@ -205,7 +205,7 @@ describe('helpers', function () {
 
 describe('examples', function () {
 	const ownTypes = Object.keys(require('../package.json')['node-red'].nodes);
-	const coreTypes = ['tab', 'inject', 'debug', 'change', 'switch', 'trigger', 'mqtt out', 'mqtt-broker'];
+	const coreTypes = ['tab', 'inject', 'debug', 'change', 'switch', 'trigger', 'mqtt out', 'mqtt-broker', 'function', 'catch', 'http in', 'http response'];
 	const dir = path.join(__dirname, '../examples');
 
 	for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.json'))) {
