@@ -1,6 +1,6 @@
 {
 	"name": "@inwendo/node-red-vynst",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Node-RED nodes for vynst (inwendo ERP): API token login, ERP data, webhooks over https or MQTT, booking schedule, check-in, smart locks and access checks for barcode / QR / RFID readers",
 	"keywords": [
 		"node-red",

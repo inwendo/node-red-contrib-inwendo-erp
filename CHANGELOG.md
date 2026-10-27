@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- New example `new-ticket-notification` (trigger + vynst node), so every node has an example.
+- Local publishes work again (provenance only from the workflow); repository url normalized.
+
 ## 0.3.0
 
 - First release on npm, as `@inwendo/node-red-vynst` (scoped name as Node-RED recommends for new packages).
