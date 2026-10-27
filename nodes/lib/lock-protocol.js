@@ -87,7 +87,7 @@ function verifyPushCommand({ rawBody, signature, secret, instanceId, nonces, now
 }
 
 /**
- * Commands waiting for an "inwendo erp lock result" node, shared by all nodes of the runtime.
+ * Commands waiting for a "vynst lock result" node, shared by all nodes of the runtime.
  */
 const pendingResults = new Map();
 

@@ -4,7 +4,7 @@ const { ErpClient } = require('./lib/erp-client');
 
 module.exports = function (RED) {
 	/**
-	 * Connection to one inwendo ERP instance: host and API token (JWT).
+	 * Connection to one vynst (inwendo ERP) instance: host and API token (JWT).
 	 */
 	function InwendoErpConfigNode(config) {
 		RED.nodes.createNode(this, config);

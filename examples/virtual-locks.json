@@ -1,0 +1,434 @@
+[
+	{
+		"id": "f548461f55af394c",
+		"type": "tab",
+		"label": "vynst: virtual locks",
+		"disabled": false,
+		"info": "Virtual locks to try vynst (inwendo ERP) smart locks with Node-RED, without any hardware.\n\n1. Open \"inwendo ERP\" and enter the address of your installation and an API token (right: events, write).\n2. Open the lock bridge \"Vereinsheim (virtuell)\" once and press Done: instance id and secret are created.\n3. Deploy. In vynst open Settings > Smart locks, the Node-RED connection, and press \"Sync devices\"; give rights.\n4. \"Open\" in the app: the command arrives over the vynst MQTT broker, the virtual lock opens, confirms and locks itself again after 5 s.\n5. Reader: the inject node \"reader: card 04A1B2C3\" asks vynst whether the card may open the front door (set the card number at a person). Over http: POST /virtual-locks/front_door/reader {\"credential\": \"04A1B2C3\"}.\n\nGET /virtual-locks shows the state and the history of the locks, POST /virtual-locks/front_door/jam {\"jammed\": true} makes the lock fail its commands (vynst logs the failure).\nReplace the function nodes \"virtual lock ...\" by your relay (GPIO, Shelly, Modbus ...) and the inject node by your reader."
+	},
+	{
+		"id": "4dc07fb7d48f233a",
+		"type": "inwendo-erp-config",
+		"name": "inwendo ERP",
+		"host": "https://demo.vynst.de"
+	},
+	{
+		"id": "9d9b5339021417cf",
+		"type": "inwendo-erp-lock-result",
+		"z": "f548461f55af394c",
+		"name": "result",
+		"x": 700,
+		"y": 140,
+		"wires": []
+	},
+	{
+		"id": "2b9e0bef0bcc40bb",
+		"type": "inwendo-erp-lock-bridge",
+		"name": "Vereinsheim (virtuell)",
+		"server": "4dc07fb7d48f233a",
+		"instanceId": "",
+		"delivery": "mqtt",
+		"publicUrl": ""
+	},
+	{
+		"id": "6d916200b8b96c97",
+		"type": "inject",
+		"z": "f548461f55af394c",
+		"name": "start: all locked",
+		"props": [],
+		"repeat": "",
+		"crontab": "",
+		"once": true,
+		"onceDelay": 0.1,
+		"topic": "",
+		"x": 140,
+		"y": 40,
+		"wires": [
+			[
+				"39ae803db815e491"
+			]
+		]
+	},
+	{
+		"id": "39ae803db815e491",
+		"type": "function",
+		"z": "f548461f55af394c",
+		"name": "reset virtual locks",
+		"outputs": 2,
+		"x": 360,
+		"y": 40,
+		"func": "flow.set('locks', {\"front_door\":{\"state\":\"locked\",\"jammed\":false,\"events\":[]},\"gym\":{\"state\":\"locked\",\"jammed\":false,\"events\":[]}});\nreturn [{\"payload\":\"locked\"},{\"payload\":\"locked\"}];",
+		"wires": [
+			[
+				"03943c6908150e01"
+			],
+			[
+				"22a46bc42067efe4"
+			]
+		]
+	},
+	{
+		"id": "665702706aeb32a8",
+		"type": "debug",
+		"z": "f548461f55af394c",
+		"name": "commands of vynst",
+		"active": true,
+		"tosidebar": true,
+		"console": false,
+		"complete": "payload",
+		"targetType": "msg",
+		"x": 720,
+		"y": 200,
+		"wires": []
+	},
+	{
+		"id": "03943c6908150e01",
+		"type": "inwendo-erp-lock",
+		"z": "f548461f55af394c",
+		"name": "",
+		"bridge": "2b9e0bef0bcc40bb",
+		"lockId": "front_door",
+		"lockName": "Haupteingang (virtuell)",
+		"unlockMethod": "remote",
+		"confirm": "manual",
+		"resultTimeout": 10,
+		"x": 170,
+		"y": 140,
+		"wires": [
+			[
+				"7eadd29c222455e3"
+			]
+		]
+	},
+	{
+		"id": "7eadd29c222455e3",
+		"type": "function",
+		"z": "f548461f55af394c",
+		"name": "virtual lock front_door",
+		"outputs": 2,
+		"x": 440,
+		"y": 140,
+		"func": "// a command of vynst: msg.payload.command = open | lock\n// replace this node by your relay; send the result to \"inwendo erp lock result\" (msg.success, msg.state)\nconst id = \"front_door\";\nconst relockMs = 5000;\nconst locks = flow.get('locks') || {};\nconst lock = locks[id];\nconst command = msg.payload.command;\nconst event = { at: Date.now(), source: 'erp', command, command_id: msg.payload.command_id, smart_lock_id: msg.payload.smart_lock_id };\nif (lock.jammed) {\n  event.result = 'jammed';\n  lock.events.push(event);\n  flow.set('locks', locks);\n  msg.success = false;\n  msg.state = 'jammed';\n  msg.message = 'bolt jammed';\n  return [msg, null];\n}\nlock.state = command === 'open' ? 'unlocked' : 'locked';\nevent.result = lock.state;\nlock.events.push(event);\nflow.set('locks', locks);\nmsg.success = true;\nmsg.state = lock.state;\nif (command === 'open' && relockMs > 0) {\n  setTimeout(() => {\n    const all = flow.get('locks');\n    all[id].state = 'locked';\n    all[id].events.push({ at: Date.now(), source: 'relock', result: 'locked' });\n    flow.set('locks', all);\n    // the lock node reports the new state to vynst\n    node.send([null, { payload: 'locked' }]);\n  }, relockMs);\n}\nreturn [msg, null];",
+		"wires": [
+			[
+				"9d9b5339021417cf",
+				"665702706aeb32a8"
+			],
+			[
+				"03943c6908150e01"
+			]
+		]
+	},
+	{
+		"id": "22a46bc42067efe4",
+		"type": "inwendo-erp-lock",
+		"z": "f548461f55af394c",
+		"name": "",
+		"bridge": "2b9e0bef0bcc40bb",
+		"lockId": "gym",
+		"lockName": "Fitnessraum (virtuell)",
+		"unlockMethod": "qr_code",
+		"confirm": "manual",
+		"resultTimeout": 10,
+		"x": 170,
+		"y": 220,
+		"wires": [
+			[
+				"28b473ffefde48e3"
+			]
+		]
+	},
+	{
+		"id": "28b473ffefde48e3",
+		"type": "function",
+		"z": "f548461f55af394c",
+		"name": "virtual lock gym",
+		"outputs": 2,
+		"x": 440,
+		"y": 220,
+		"func": "// a command of vynst: msg.payload.command = open | lock\n// replace this node by your relay; send the result to \"inwendo erp lock result\" (msg.success, msg.state)\nconst id = \"gym\";\nconst relockMs = 5000;\nconst locks = flow.get('locks') || {};\nconst lock = locks[id];\nconst command = msg.payload.command;\nconst event = { at: Date.now(), source: 'erp', command, command_id: msg.payload.command_id, smart_lock_id: msg.payload.smart_lock_id };\nif (lock.jammed) {\n  event.result = 'jammed';\n  lock.events.push(event);\n  flow.set('locks', locks);\n  msg.success = false;\n  msg.state = 'jammed';\n  msg.message = 'bolt jammed';\n  return [msg, null];\n}\nlock.state = command === 'open' ? 'unlocked' : 'locked';\nevent.result = lock.state;\nlock.events.push(event);\nflow.set('locks', locks);\nmsg.success = true;\nmsg.state = lock.state;\nif (command === 'open' && relockMs > 0) {\n  setTimeout(() => {\n    const all = flow.get('locks');\n    all[id].state = 'locked';\n    all[id].events.push({ at: Date.now(), source: 'relock', result: 'locked' });\n    flow.set('locks', all);\n    // the lock node reports the new state to vynst\n    node.send([null, { payload: 'locked' }]);\n  }, relockMs);\n}\nreturn [msg, null];",
+		"wires": [
+			[
+				"9d9b5339021417cf",
+				"665702706aeb32a8"
+			],
+			[
+				"22a46bc42067efe4"
+			]
+		]
+	},
+	{
+		"id": "d3390e19a4ae7105",
+		"type": "http in",
+		"z": "f548461f55af394c",
+		"name": "reader",
+		"url": "/virtual-locks/:lock/reader",
+		"method": "post",
+		"upload": false,
+		"swaggerDoc": "",
+		"x": 140,
+		"y": 340,
+		"wires": [
+			[
+				"9ae4855b566fba2c"
+			]
+		]
+	},
+	{
+		"id": "5dda055682f983e0",
+		"type": "inject",
+		"z": "f548461f55af394c",
+		"name": "reader: card 04A1B2C3",
+		"props": [
+			{
+				"p": "payload"
+			},
+			{
+				"p": "lockId",
+				"v": "front_door",
+				"vt": "str"
+			}
+		],
+		"repeat": "",
+		"crontab": "",
+		"once": false,
+		"onceDelay": 0.1,
+		"topic": "",
+		"payload": "04A1B2C3",
+		"payloadType": "str",
+		"x": 160,
+		"y": 380,
+		"wires": [
+			[
+				"9ae4855b566fba2c"
+			]
+		]
+	},
+	{
+		"id": "9ae4855b566fba2c",
+		"type": "function",
+		"z": "f548461f55af394c",
+		"name": "credential of the reader",
+		"outputs": 2,
+		"x": 400,
+		"y": 340,
+		"func": "// from the http endpoint (POST /virtual-locks/:lock/reader {\"credential\": \"...\"}) or from the inject node\nconst bridges = {\"front_door\":\"mqtt\",\"gym\":\"mqtt\"};\nconst order = [\"mqtt\"];\nconst out = new Array(order.length + 1).fill(null);\nif (msg.req) {\n  msg.lockId = msg.req.params.lock;\n  if (msg.req.body && msg.req.body.credential_type) msg.credentialType = msg.req.body.credential_type;\n  msg.payload = msg.payload && msg.payload.credential;\n}\nif (!bridges[msg.lockId]) {\n  msg.statusCode = 404;\n  msg.payload = { error: 'unknown lock ' + msg.lockId };\n  out[order.length] = msg;\n  return out;\n}\nout[order.indexOf(bridges[msg.lockId])] = msg;\nreturn out;",
+		"wires": [
+			[
+				"e09f9f07aa69eedf"
+			],
+			[
+				"a8a215bf3f543a3a"
+			]
+		]
+	},
+	{
+		"id": "e09f9f07aa69eedf",
+		"type": "inwendo-erp-access-check",
+		"z": "f548461f55af394c",
+		"name": "",
+		"target": "bridgeLock",
+		"bridge": "2b9e0bef0bcc40bb",
+		"lockId": "",
+		"server": "",
+		"smartLockId": "",
+		"credentialType": "auto",
+		"open": false,
+		"x": 650,
+		"y": 340,
+		"wires": [
+			[
+				"eefbd0d6715057b6"
+			],
+			[
+				"ea1824808ad690f4"
+			]
+		]
+	},
+	{
+		"id": "eefbd0d6715057b6",
+		"type": "function",
+		"z": "f548461f55af394c",
+		"name": "relay: open",
+		"x": 880,
+		"y": 340,
+		"func": "const locks = flow.get('locks') || {};\nconst lock = locks[msg.lockId];\nconst event = { at: Date.now(), source: 'reader', person: msg.person || null, result: 'jammed' };\nif (!lock.jammed) {\n  lock.state = 'unlocked';\n  event.result = 'unlocked';\n}\nlock.events.push(event);\nflow.set('locks', locks);\nmsg.payload = { ...msg.payload, door_opened: !lock.jammed };\nconst relock = {\"front_door\":5000,\"gym\":5000}[msg.lockId];\nif (!lock.jammed && relock > 0) {\n  const id = msg.lockId;\n  setTimeout(() => {\n    const all = flow.get('locks');\n    all[id].state = 'locked';\n    all[id].events.push({ at: Date.now(), source: 'relock', result: 'locked' });\n    flow.set('locks', all);\n  }, relock);\n}\nreturn msg;",
+		"wires": [
+			[
+				"a8a215bf3f543a3a"
+			]
+		]
+	},
+	{
+		"id": "ea1824808ad690f4",
+		"type": "function",
+		"z": "f548461f55af394c",
+		"name": "buzzer",
+		"x": 880,
+		"y": 380,
+		"func": "msg.payload = { ...msg.payload, door_opened: false };\nreturn msg;",
+		"wires": [
+			[
+				"a8a215bf3f543a3a"
+			]
+		]
+	},
+	{
+		"id": "a46d767777b3e0bf",
+		"type": "catch",
+		"z": "f548461f55af394c",
+		"name": "access check failed",
+		"scope": [
+			"e09f9f07aa69eedf"
+		],
+		"uncaught": false,
+		"x": 660,
+		"y": 440,
+		"wires": [
+			[
+				"40668cfb3be313a7"
+			]
+		]
+	},
+	{
+		"id": "40668cfb3be313a7",
+		"type": "function",
+		"z": "f548461f55af394c",
+		"name": "error",
+		"x": 880,
+		"y": 440,
+		"func": "msg.statusCode = 502;\nmsg.payload = { error: msg.error && msg.error.message };\nreturn msg;",
+		"wires": [
+			[
+				"a8a215bf3f543a3a"
+			]
+		]
+	},
+	{
+		"id": "a8a215bf3f543a3a",
+		"type": "switch",
+		"z": "f548461f55af394c",
+		"name": "from http?",
+		"property": "res",
+		"propertyType": "msg",
+		"rules": [
+			{
+				"t": "nnull"
+			},
+			{
+				"t": "else"
+			}
+		],
+		"checkall": "false",
+		"repair": false,
+		"outputs": 2,
+		"x": 1080,
+		"y": 380,
+		"wires": [
+			[
+				"94e7b9a9d0e9baf6"
+			],
+			[
+				"cc89904c314e1bff"
+			]
+		]
+	},
+	{
+		"id": "94e7b9a9d0e9baf6",
+		"type": "http response",
+		"z": "f548461f55af394c",
+		"name": "",
+		"statusCode": "",
+		"headers": {},
+		"x": 1260,
+		"y": 360,
+		"wires": []
+	},
+	{
+		"id": "cc89904c314e1bff",
+		"type": "debug",
+		"z": "f548461f55af394c",
+		"name": "reader result",
+		"active": true,
+		"tosidebar": true,
+		"console": false,
+		"complete": "payload",
+		"targetType": "msg",
+		"x": 1270,
+		"y": 400,
+		"wires": []
+	},
+	{
+		"id": "778a68336155a172",
+		"type": "http in",
+		"z": "f548461f55af394c",
+		"name": "virtual locks",
+		"url": "/virtual-locks",
+		"method": "get",
+		"upload": false,
+		"swaggerDoc": "",
+		"x": 140,
+		"y": 520,
+		"wires": [
+			[
+				"575fadd0d09a2773"
+			]
+		]
+	},
+	{
+		"id": "575fadd0d09a2773",
+		"type": "function",
+		"z": "f548461f55af394c",
+		"name": "state",
+		"x": 360,
+		"y": 520,
+		"func": "msg.payload = flow.get('locks') || {};\nreturn msg;",
+		"wires": [
+			[
+				"3fceba584bc19f30"
+			]
+		]
+	},
+	{
+		"id": "3fceba584bc19f30",
+		"type": "http response",
+		"z": "f548461f55af394c",
+		"name": "",
+		"statusCode": "",
+		"headers": {},
+		"x": 560,
+		"y": 540,
+		"wires": []
+	},
+	{
+		"id": "83685881fc181db9",
+		"type": "http in",
+		"z": "f548461f55af394c",
+		"name": "jam",
+		"url": "/virtual-locks/:lock/jam",
+		"method": "post",
+		"upload": false,
+		"swaggerDoc": "",
+		"x": 130,
+		"y": 560,
+		"wires": [
+			[
+				"75804453710459ff"
+			]
+		]
+	},
+	{
+		"id": "75804453710459ff",
+		"type": "function",
+		"z": "f548461f55af394c",
+		"name": "jam / free",
+		"x": 360,
+		"y": 560,
+		"func": "const locks = flow.get('locks') || {};\nconst lock = locks[msg.req.params.lock];\nif (!lock) {\n  msg.statusCode = 404;\n  msg.payload = {};\n  return msg;\n}\nlock.jammed = msg.payload.jammed === true;\nflow.set('locks', locks);\nmsg.payload = lock;\nreturn msg;",
+		"wires": [
+			[
+				"3fceba584bc19f30"
+			]
+		]
+	}
+]

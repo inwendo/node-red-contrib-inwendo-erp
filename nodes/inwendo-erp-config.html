@@ -9,7 +9,7 @@
 			apiToken: { type: 'password', required: true },
 		},
 		label: function () {
-			return this.name || this.host || 'inwendo ERP';
+			return this.name || this.host || 'vynst (inwendo ERP)';
 		},
 		oneditprepare: function () {
 			const node = this;
@@ -42,7 +42,7 @@
 <script type="text/html" data-template-name="inwendo-erp-config">
 	<div class="form-row">
 		<label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
-		<input type="text" id="node-config-input-name" placeholder="inwendo ERP" />
+		<input type="text" id="node-config-input-name" placeholder="vynst (inwendo ERP)" />
 	</div>
 	<div class="form-row">
 		<label for="node-config-input-host"><i class="fa fa-globe"></i> ERP Host</label>
@@ -60,12 +60,12 @@
 	<div class="form-tips">
 		Create the token in the ERP under <b>Settings → API Access Tokens</b>, long-lived. Scopes:
 		<b>Event / Write</b> for smart locks and readers, <b>Webhook / Write</b> for the trigger node and
-		the scopes of the resources the <i>inwendo erp</i> node reads or writes.
+		the scopes of the resources the <i>vynst</i> node reads or writes.
 	</div>
 </script>
 
 <script type="text/html" data-help-name="inwendo-erp-config">
-	<p>Connection to an inwendo ERP instance.</p>
+	<p>Connection to a vynst (inwendo ERP) instance.</p>
 	<h3>Properties</h3>
 	<dl class="message-properties">
 		<dt>ERP Host <span class="property-type">string</span></dt>

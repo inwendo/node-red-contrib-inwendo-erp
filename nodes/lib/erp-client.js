@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * HTTP client for the inwendo ERP API (API token login, same as the n8n node).
+ * HTTP client for vynst (inwendo ERP) API (API token login, same as the n8n node).
  *
  * Every request sends X-IW-Trigger-Source: nodered so the ERP does not report changes made by
  * Node-RED back to the Node-RED webhooks (no trigger -> flow -> update -> trigger loop).
@@ -26,7 +26,7 @@ class InwendoErpError extends Error {
 function normalizeHost(host) {
 	const value = String(host || '').trim().replace(/\/+$/, '');
 	if (!value) {
-		throw new InwendoErpError('inwendo ERP host is not configured');
+		throw new InwendoErpError('vynst (inwendo ERP) host is not configured');
 	}
 	return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }
@@ -48,9 +48,9 @@ function buildUrl(host, path, qs) {
 function errorFromResponse(response, bodyText) {
 	const erpCode = response.headers.get('x-iw-error-code') || undefined;
 	const erpDetails = response.headers.get('x-iw-error-json') || undefined;
-	let message = `inwendo ERP request failed with HTTP ${response.status}`;
+	let message = `vynst (inwendo ERP) request failed with HTTP ${response.status}`;
 	if (erpCode) {
-		message = `inwendo ERP error ${erpCode}`;
+		message = `vynst (inwendo ERP) error ${erpCode}`;
 	}
 	if (erpDetails) {
 		message += `: ${erpDetails}`;
@@ -61,6 +61,35 @@ function errorFromResponse(response, bodyText) {
 		erpDetails,
 		body: bodyText,
 	});
+}
+
+/** Inventory loans have their own "switched off" error (setting event_inventory_enabled). */
+const INVENTORY_DISABLED_CODE = 1585;
+
+/**
+ * A function the ERP offers behind a setting that is switched off. The ERP answers HTTP 400 (its
+ * "soft" error) with X-IW-ERROR-CODE 404 and X-IW-ERROR-JSON ["feature disabled: <setting id>"];
+ * detected by the headers, not by the HTTP status.
+ *
+ * @returns {string|null} the id of the ERP setting, null for any other error
+ */
+function featureDisabledSetting(error) {
+	if (!error || typeof error !== 'object') {
+		return null;
+	}
+	if (error.erpCode === 404) {
+		const match = /feature disabled:\s*([A-Za-z0-9_.-]+)/i.exec(String(error.erpDetails || ''));
+		return match ? match[1] : null;
+	}
+	if (error.erpCode === INVENTORY_DISABLED_CODE) {
+		return 'event_inventory_enabled';
+	}
+	return null;
+}
+
+/** Status text of a node whose ERP function is switched off in the ERP settings. */
+function featureDisabledText(setting) {
+	return `Funktion im ERP deaktiviert: ${setting}`;
 }
 
 class ErpClient {
@@ -79,7 +108,7 @@ class ErpClient {
 	 */
 	async requestFull(method, path, { body, qs, binary = false, timeout } = {}) {
 		if (!this.apiToken) {
-			throw new InwendoErpError('inwendo ERP API token is not configured');
+			throw new InwendoErpError('vynst (inwendo ERP) API token is not configured');
 		}
 		const headers = {
 			'x-iw-jwt-token': this.apiToken,
@@ -100,7 +129,7 @@ class ErpClient {
 			response = await this.fetch(buildUrl(this.host, path, qs), options);
 		} catch (error) {
 			const reason = error && error.name === 'AbortError' ? 'timeout' : (error && error.message) || String(error);
-			throw new InwendoErpError(`inwendo ERP request failed: ${reason}`);
+			throw new InwendoErpError(`vynst (inwendo ERP) request failed: ${reason}`);
 		} finally {
 			clearTimeout(timer);
 		}
@@ -159,4 +188,4 @@ class ErpClient {
 	}
 }
 
-module.exports = { ErpClient, InwendoErpError, normalizeHost, buildUrl, TRIGGER_SOURCE };
+module.exports = { ErpClient, InwendoErpError, normalizeHost, buildUrl, featureDisabledSetting, featureDisabledText, TRIGGER_SOURCE };

@@ -1,28 +1,44 @@
-name: Publish to npm
+# Publishes the package to npm when a version tag is pushed or when the workflow is started by hand
+# (Actions tab or API); it publishes the version in package.json and skips a version already on npm.
+#
+# No token: npm trusted publishing (OIDC) with provenance, so only this workflow can publish.
+# One-time setup on npmjs.com (package settings → Publish access → Trusted Publishers):
+# GitHub Actions, owner `inwendo`, repository `node-red-contrib-inwendo-erp`, workflow `publish.yml`.
+# npm offers that setting only for a package that exists; see "Release" in README.md for the
+# one-time bootstrap version.
+#
+# New versions reach the Node-RED library (flows.nodered.org) after its refresh; the package is
+# submitted there once by hand (+ → Node).
 
-# Publishes the package when a GitHub release is published, or by hand from the
-# Actions tab. Needs the repository secret NPM_TOKEN (an npm automation or
-# granular access token that may publish node-red-contrib-inwendo-erp).
-# No --provenance: npm only signs provenance for public repositories.
+name: Publish
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - '*.*.*'
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   publish:
+    name: Publish to npm
     runs-on: ubuntu-latest
+
+    permissions:
+      # Required to mint the OIDC token for trusted publishing and the provenance attestation.
+      id-token: write
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 'lts/*'
+          cache: 'npm'
           registry-url: https://registry.npmjs.org
+
+      # Trusted publishing (OIDC) needs npm 11.5.1 or newer; Node LTS may ship an older npm.
+      - run: npm install -g npm@^11.5.1
 
       - run: npm ci
 
@@ -30,16 +46,24 @@ jobs:
 
       - run: npm test
 
-      - name: Skip if this version is already on npm
+      - name: Tag matches package.json
+        if: github.ref_type == 'tag'
+        run: test "$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+
+      - name: Node-RED scorecard
+        continue-on-error: true
+        run: npm run validate
+
+      - name: Skip a version already on npm
         id: check
         run: |
+          NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
-          if npm view "node-red-contrib-inwendo-erp@$VERSION" version >/dev/null 2>&1; then
-            echo "Version $VERSION is already published."
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is already published."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - if: steps.check.outputs.skip != 'true'
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish
+        if: steps.check.outputs.skip != 'true'
+        run: npm publish --provenance --access public

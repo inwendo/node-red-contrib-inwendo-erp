@@ -1,7 +1,7 @@
 'use strict';
 
 const mqtt = require('mqtt');
-const crypto = require('crypto');
+const { ErpMqttSubscription } = require('./lib/mqtt-subscription');
 const {
 	SIGNATURE_HEADER,
 	INSTANCE_ID_PATTERN,
@@ -17,7 +17,7 @@ const MAX_BACKOFF_MS = 5 * 60 * 1000;
 
 module.exports = function (RED) {
 	/**
-	 * Offers the locks of this Node-RED (the "inwendo erp lock" nodes) to the ERP and receives their
+	 * Offers the locks of this Node-RED (the "vynst lock" nodes) to the ERP and receives their
 	 * signed commands: over the ERP's MQTT broker (works behind NAT) or as https push requests.
 	 */
 	function InwendoErpLockBridgeNode(config) {
@@ -35,14 +35,12 @@ module.exports = function (RED) {
 		bridge.locks = new Map();
 		bridge.registered = false;
 		bridge.closed = false;
-		bridge.mqttClient = null;
 		bridge.lastStatus = { fill: 'grey', shape: 'ring', text: 'connecting' };
 
 		const nonces = new NonceCache();
 		let registerTimer = null;
 		let reregisterTimer = null;
 		let failures = 0;
-		let mqttAccess = null;
 
 		bridge.configError = validate();
 
@@ -158,59 +156,38 @@ module.exports = function (RED) {
 			return Math.min(MAX_BACKOFF_MS, 5000 * Math.pow(2, Math.min(failures, 6)));
 		}
 
+		/** Hook for tests; by default the mqtt package. */
+		bridge.mqttFactory = (url, options) => mqtt.connect(url, options);
+
+		const subscription = new ErpMqttSubscription({
+			clientIdBase: bridge.instanceId,
+			factory: (url, options) => bridge.mqttFactory(url, options),
+			onMessage: (text) => bridge.handleMqttMessage(text),
+			onState: (state, error) => {
+				if (state === 'subscribed') {
+					updateStatus();
+				} else if (state === 'subscribe_failed') {
+					bridge.error(`MQTT subscribe failed: ${error.message}`);
+					bridge.setStatus({ fill: 'red', shape: 'ring', text: 'MQTT subscribe failed' });
+				} else if (state === 'disconnected') {
+					bridge.setStatus({ fill: 'red', shape: 'ring', text: 'MQTT disconnected' });
+				} else if (state === 'error') {
+					bridge.warn(`MQTT: ${error.message}`);
+				}
+			},
+		});
+		/** The MQTT client of the bridge (tests and the E2E test wait for its connection). */
+		Object.defineProperty(bridge, 'mqttClient', { get: () => subscription.client });
+
 		/**
 		 * Connects to the ERP's broker with the access of the last registration. A renewed password
 		 * is used for the next reconnect; the connection itself stays.
 		 */
 		function connectMqtt(access) {
-			if (!access || !access.url || !access.topic) {
+			if (!subscription.update(access)) {
 				bridge.error('The ERP did not return MQTT access for this bridge');
-				return;
 			}
-			const changedBroker = !mqttAccess || mqttAccess.url !== access.url || mqttAccess.topic !== access.topic || mqttAccess.username !== access.username;
-			mqttAccess = access;
-			if (bridge.mqttClient && !changedBroker) {
-				bridge.mqttClient.options.password = access.password;
-				return;
-			}
-			if (bridge.mqttClient) {
-				bridge.mqttClient.end(true);
-			}
-
-			const client = bridge.mqttFactory(access.url, {
-				username: access.username,
-				password: access.password,
-				clientId: `${access.client_id || bridge.instanceId}_${crypto.randomBytes(3).toString('hex')}`,
-				clean: true,
-				keepalive: 60,
-				reconnectPeriod: 5000,
-				connectTimeout: 15000,
-				protocolVersion: 4,
-			});
-			bridge.mqttClient = client;
-			client.on('connect', () => {
-				client.subscribe(access.topic, { qos: 0 }, (error) => {
-					if (error) {
-						bridge.error(`MQTT subscribe failed: ${error.message}`);
-						bridge.setStatus({ fill: 'red', shape: 'ring', text: 'MQTT subscribe failed' });
-						return;
-					}
-					updateStatus();
-				});
-			});
-			client.on('close', () => {
-				if (!bridge.closed) {
-					bridge.setStatus({ fill: 'red', shape: 'ring', text: 'MQTT disconnected' });
-				}
-			});
-			client.on('error', (error) => {
-				bridge.warn(`MQTT: ${error.message}`);
-			});
-			client.on('message', (topic, message) => bridge.handleMqttMessage(message.toString('utf8')));
 		}
-
-		/** Hook for tests; by default the mqtt package. */
-		bridge.mqttFactory = (url, options) => mqtt.connect(url, options);
 
 		bridge.handleMqttMessage = async function (text) {
 			let envelope;
@@ -308,10 +285,7 @@ module.exports = function (RED) {
 			clearTimeout(registerTimer);
 			clearTimeout(reregisterTimer);
 			removeRoute(RED.httpNode, bridge.pushPath, 'post');
-			if (bridge.mqttClient) {
-				bridge.mqttClient.end(true);
-				bridge.mqttClient = null;
-			}
+			subscription.end();
 			if (removed && !bridge.configError) {
 				try {
 					await bridge.server.client.request('DELETE', '/api/nodered/smart_lock/register', {

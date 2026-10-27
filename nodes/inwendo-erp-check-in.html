@@ -1,0 +1,92 @@
+<script type="text/javascript">
+	RED.nodes.registerType('inwendo-erp-check-in', {
+		category: 'vynst (inwendo ERP)',
+		color: '#7fb7df',
+		defaults: {
+			name: { value: '' },
+			server: { value: '', type: 'inwendo-erp-config', required: true },
+			mode: { value: 'attendanceList' },
+			listId: { value: '' },
+		},
+		inputs: 1,
+		outputs: 2,
+		outputLabels: ['checked in / out', 'refused'],
+		icon: 'inwendo.png',
+		paletteLabel: 'vynst check-in',
+		label: function () {
+			return this.name || (this.mode === 'staffClock' ? 'staff clock' : 'check-in ' + (this.listId || ''));
+		},
+		oneditprepare: function () {
+			function update() {
+				$('.inwendo-erp-checkin-list').toggle($('#node-input-mode').val() !== 'staffClock');
+			}
+			$('#node-input-mode').on('change', update);
+			update();
+		},
+	});
+</script>
+
+<script type="text/html" data-template-name="inwendo-erp-check-in">
+	<div class="form-row">
+		<label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+		<input type="text" id="node-input-name" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-server"><i class="fa fa-server"></i> ERP</label>
+		<input type="text" id="node-input-server" />
+	</div>
+	<div class="form-row">
+		<label for="node-input-mode"><i class="fa fa-sign-in"></i> Mode</label>
+		<select id="node-input-mode">
+			<option value="attendanceList">Attendance list (check-in / check-out)</option>
+			<option value="staffClock">Staff clock (work time in / out)</option>
+		</select>
+	</div>
+	<div class="form-row inwendo-erp-checkin-list">
+		<label for="node-input-listId"><i class="fa fa-list"></i> List ID</label>
+		<input type="text" id="node-input-listId" placeholder="id or identifier of the attendance list (or msg.listId)" />
+	</div>
+	<div class="form-tips">
+		Token scopes: <b>Attendance scanner</b> (<code>eas</code>) <b>Write</b> for attendance lists, <b>Work time entry scanner</b> (<code>wtes</code>) <b>Write</b> for the staff clock.
+	</div>
+</script>
+
+<script type="text/html" data-help-name="inwendo-erp-check-in">
+	<p>Check-in at the entrance with a card or QR code reader: attendance list or staff time clock of vynst (inwendo ERP).</p>
+	<h3>Inputs</h3>
+	<dl class="message-properties">
+		<dt>payload <span class="property-type">string | number | Buffer</span></dt>
+		<dd>What the reader read: card number stored at the person, member number or the QR code of the digital member card
+			(also as <code>…/verify/&lt;code&gt;</code> link); for the staff clock the QR code of the employment contract. Line breaks are removed.</dd>
+		<dt class="optional">listId <span class="property-type">string | number</span></dt>
+		<dd>Overrides the attendance list of the node.</dd>
+	</dl>
+	<h3>Outputs</h3>
+	<ol class="node-ports">
+		<li>Checked in / out
+			<dl class="message-properties">
+				<dt>payload <span class="property-type">object</span></dt>
+				<dd>The attendance list entry or work time entry of the ERP (<code>start</code>, <code>end</code>, …).</dd>
+				<dt>action <span class="property-type">string</span></dt>
+				<dd><code>check_in</code>, <code>check_out</code>, <code>clock_in</code> or <code>clock_out</code>.</dd>
+				<dt>checkedIn <span class="property-type">boolean</span></dt>
+				<dt>person <span class="property-type">object</span></dt>
+				<dd><code>identifier</code> (what was scanned); <code>id</code> and <code>name</code> when the ERP answer has them (staff clock: the user).</dd>
+			</dl>
+		</li>
+		<li>Refused
+			<dl class="message-properties">
+				<dt>payload <span class="property-type">object</span></dt>
+				<dd><code>success: false</code>, <code>reason</code> (<code>unknown_person</code>, <code>scanned_too_often</code>,
+					<code>list_not_found</code>, <code>no_employment_contract</code>, <code>no_permission</code>, <code>invalid_entry</code>,
+					<code>refused</code>), <code>erpCode</code>, <code>message</code>.</dd>
+			</dl>
+		</li>
+	</ol>
+	<h3>Details</h3>
+	<p>
+		<b>Attendance list</b>: <code>GET /api/event/scanner/attendancelist/&lt;list&gt;/&lt;person&gt;</code>. The first scan checks the
+		person in, the next one checks out (not within 60 seconds). <b>Staff clock</b>: <code>GET /api/time/work_entry_scanner/&lt;person&gt;</code>
+		starts or ends the work time. Network and server errors are thrown (use a <i>catch</i> node), they do not go to output 2.
+	</p>
+</script>

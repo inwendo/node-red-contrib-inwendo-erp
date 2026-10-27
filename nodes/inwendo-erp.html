@@ -1,22 +1,30 @@
 <script type="text/javascript">
 	(function () {
-		const RESOURCES = [
-			['booking', 'Booking'],
-			['company', 'Company'],
-			['event', 'Event'],
-			['eventSignUp', 'Event Sign-Up'],
-			['invoice', 'Invoice'],
-			['newsArticle', 'News Article'],
-			['offer', 'Offer'],
-			['person', 'Person'],
-			['project', 'Project'],
-			['smartLock', 'Smart Lock'],
-			['smartLockLog', 'Smart Lock Log'],
-			['ticket', 'Ticket'],
-			['timeEntry', 'Time Entry'],
-			['webhook', 'Webhook'],
-			['genericRequest', 'Generic API Request'],
-		];
+		// resource -> [label, operations, operations without ID, parent id label, operations with parent id];
+		// the same as nodes/lib/resources.js (checked by the tests)
+		const RESOURCES = {
+			booking: ['Booking', ['get', 'getAll', 'create', 'update']],
+			company: ['Company', ['get', 'getAll', 'create', 'update']],
+			event: ['Event', ['get', 'getAll', 'create', 'update']],
+			eventSignUp: ['Event Sign-Up', ['get', 'getAll', 'create', 'update']],
+			invoice: ['Invoice', ['get', 'getAll', 'create', 'getPdf']],
+			newsArticle: ['News Article', ['get', 'getAll', 'create', 'update']],
+			offer: ['Offer', ['get', 'getAll', 'create', 'getPdf']],
+			person: ['Person', ['get', 'getAll', 'create', 'update']],
+			project: ['Project', ['get', 'getAll', 'create', 'update']],
+			smartLock: ['Smart Lock', ['get', 'getAll', 'unlock', 'lock', 'status']],
+			smartLockLog: ['Smart Lock Log', ['get', 'getAll']],
+			ticket: ['Ticket', ['get', 'getAll', 'create', 'update']],
+			timeEntry: ['Time Entry', ['get', 'getAll', 'create', 'update']],
+			webhook: ['Webhook', ['get', 'getAll', 'create', 'update']],
+			inventoryLoan: ['Inventory Loan', ['get', 'getAll', 'create', 'returnLoan', 'extend', 'stock', 'availability'], ['getAll', 'create', 'stock']],
+			attendanceList: ['Attendance List', ['get', 'getAll', 'create', 'update']],
+			attendanceListEntry: ['Attendance List Entry', ['get', 'getAll', 'create', 'update'], null, 'Attendance list ID', ['getAll', 'create']],
+			shiftPlanEntry: ['Shift Plan Entry', ['get', 'getAll', 'create', 'update', 'clockIn', 'clockOut']],
+			occupancy: ['Occupancy', ['getOccupancy'], ['getOccupancy']],
+			usageCounter: ['Usage Counter', ['get', 'getAll', 'create', 'update', 'setValue']],
+			userNotification: ['Notification', ['get', 'getAll', 'markRead']],
+		};
 		const OPERATIONS = {
 			get: 'Get',
 			getAll: 'Get Many',
@@ -26,23 +34,31 @@
 			unlock: 'Unlock (open)',
 			lock: 'Lock',
 			status: 'Status',
+			returnLoan: 'Return',
+			extend: 'Extend',
+			stock: 'Stock Overview',
+			availability: 'Availability',
+			clockIn: 'Clock In',
+			clockOut: 'Clock Out',
+			getOccupancy: 'Get Occupancy',
+			setValue: 'Set Value',
+			markRead: 'Mark as Read',
+		};
+		const ID_PLACEHOLDERS = {
+			availability: 'bookable (inventory item) id, or msg.id',
+			getOccupancy: 'bookable ids, optional (7,8), or msg.id',
 		};
 
 		function operationsFor(resource) {
-			if (resource === 'invoice' || resource === 'offer') {
-				return ['get', 'getAll', 'create', 'getPdf'];
-			}
-			if (resource === 'smartLockLog') {
-				return ['get', 'getAll'];
-			}
-			if (resource === 'smartLock') {
-				return ['get', 'getAll', 'unlock', 'lock', 'status'];
-			}
-			return ['get', 'getAll', 'create', 'update'];
+			return RESOURCES[resource] ? RESOURCES[resource][1] : [];
+		}
+
+		function withoutId(resource) {
+			return (RESOURCES[resource] && RESOURCES[resource][2]) || ['getAll', 'create'];
 		}
 
 		RED.nodes.registerType('inwendo-erp', {
-			category: 'inwendo ERP',
+			category: 'vynst (inwendo ERP)',
 			color: '#7fb7df',
 			defaults: {
 				name: { value: '' },
@@ -55,6 +71,7 @@
 				searchString: { value: '' },
 				method: { value: 'GET' },
 				endpoint: { value: '' },
+				parentId: { value: '' },
 			},
 			inputs: 1,
 			outputs: 1,
@@ -64,16 +81,17 @@
 					return this.name;
 				}
 				if (this.resource === 'genericRequest') {
-					return (this.method || 'GET') + ' ' + (this.endpoint || 'inwendo erp');
+					return (this.method || 'GET') + ' ' + (this.endpoint || 'vynst');
 				}
-				const resource = RESOURCES.find((entry) => entry[0] === this.resource);
-				return (OPERATIONS[this.operation] || this.operation) + ': ' + (resource ? resource[1] : this.resource);
+				const resource = RESOURCES[this.resource];
+				return (OPERATIONS[this.operation] || this.operation) + ': ' + (resource ? resource[0] : this.resource);
 			},
-			paletteLabel: 'inwendo erp',
+			paletteLabel: 'vynst',
 			oneditprepare: function () {
 				const node = this;
 				const resourceSelect = $('#node-input-resource');
-				RESOURCES.forEach((entry) => resourceSelect.append($('<option>').val(entry[0]).text(entry[1])));
+				Object.keys(RESOURCES).forEach((key) => resourceSelect.append($('<option>').val(key).text(RESOURCES[key][0])));
+				resourceSelect.append($('<option>').val('genericRequest').text('Generic API Request'));
 				resourceSelect.val(node.resource);
 
 				function update() {
@@ -85,14 +103,20 @@
 					const current = operationSelect.val() || node.operation;
 					operationSelect.empty();
 					operationsFor(resource).forEach((operation) => operationSelect.append($('<option>').val(operation).text(OPERATIONS[operation])));
-					operationSelect.val(operationsFor(resource).includes(current) ? current : 'getAll');
+					const operations = operationsFor(resource);
+					operationSelect.val(operations.includes(current) ? current : operations.includes('getAll') ? 'getAll' : operations[0]);
 					updateOperation();
 				}
 
 				function updateOperation() {
 					const operation = $('#node-input-operation').val();
-					const generic = resourceSelect.val() === 'genericRequest';
-					$('.inwendo-erp-id').toggle(!generic && operation !== 'getAll' && operation !== 'create');
+					const resource = resourceSelect.val();
+					const generic = resource === 'genericRequest';
+					const definition = RESOURCES[resource] || [];
+					$('.inwendo-erp-id').toggle(!generic && (!withoutId(resource).includes(operation) || !!ID_PLACEHOLDERS[operation]));
+					$('#node-input-entityId').attr('placeholder', ID_PLACEHOLDERS[operation] || 'or msg.id');
+					$('.inwendo-erp-parent').toggle(!generic && !!definition[3] && (definition[4] || []).includes(operation));
+					$('#node-input-parentId').attr('placeholder', (definition[3] || '') + ' (or msg.parentId)');
 					$('.inwendo-erp-list').toggle(!generic && operation === 'getAll');
 					$('.inwendo-erp-limit').toggle(!generic && operation === 'getAll' && !$('#node-input-returnAll').is(':checked'));
 				}
@@ -127,6 +151,10 @@
 		<label for="node-input-entityId"><i class="fa fa-hashtag"></i> ID</label>
 		<input type="text" id="node-input-entityId" placeholder="or msg.id" />
 	</div>
+	<div class="form-row inwendo-erp-parent">
+		<label for="node-input-parentId"><i class="fa fa-sitemap"></i> List ID</label>
+		<input type="text" id="node-input-parentId" placeholder="or msg.parentId" />
+	</div>
 	<div class="form-row inwendo-erp-list">
 		<label for="node-input-searchString"><i class="fa fa-search"></i> Search</label>
 		<input type="text" id="node-input-searchString" placeholder="or msg.searchString" />
@@ -159,7 +187,7 @@
 </script>
 
 <script type="text/html" data-help-name="inwendo-erp">
-	<p>Reads and writes inwendo ERP data (the functions of the n8n node).</p>
+	<p>Reads and writes vynst (inwendo ERP) data (the functions of the n8n node).</p>
 	<h3>Inputs</h3>
 	<dl class="message-properties">
 		<dt class="optional">payload <span class="property-type">object</span></dt>
@@ -168,6 +196,8 @@
 		<dd>ID for Get, Update, Get PDF and the smart lock actions; overrides the node setting.</dd>
 		<dt class="optional">query <span class="property-type">object</span></dt>
 		<dd>Query parameters, e.g. <code>{"company": 12}</code> for list filters.</dd>
+		<dt class="optional">parentId <span class="property-type">string | number</span></dt>
+		<dd>Attendance list of <i>Attendance List Entry → Get Many / Create</i>; overrides the node setting.</dd>
 		<dt class="optional">resource, operation, searchString, limit, returnAll, method, endpoint</dt>
 		<dd>Override the node settings.</dd>
 	</dl>
@@ -181,6 +211,28 @@
 		<i>Update</i> uses <code>PATCH</code>: fields you do not send keep their value. Invoices and offers cannot be
 		changed once created. <i>Smart Lock → Unlock / Lock</i> opens or locks an ERP smart lock through its provider
 		(Nuki, LOQED, Home Assistant, Node-RED) with the rights of the token's user and writes the smart lock log.
+	</p>
+	<h4>More resources</h4>
+	<ul>
+		<li><b>Inventory Loan</b> (ERP setting <code>event_inventory_enabled</code>): <i>Create</i> hands the item of a booking over
+			(<code>{"booking": 12, "quantity": 1, "due_at": "…", "deposit_amount": 20}</code>), <i>Return</i>
+			(<code>{"condition": "…", "retained_amount": 0, "note": "…"}</code>), <i>Extend</i> (<code>{"due_at": "…"}</code>),
+			<i>Stock Overview</i> (all items with lent / free pieces) and <i>Availability</i> of one item
+			(ID = bookable, <code>msg.query = {"start": "…", "end": "…"}</code>). Get Many filters:
+			<code>state</code> (LENT, RETURNED, OVERDUE), <code>bookable</code>, <code>booking</code>, <code>person</code>.</li>
+		<li><b>Attendance List</b> and <b>Attendance List Entry</b>: entries of a list (List ID), create / update entries.
+			For check-in by card or QR code use the <i>vynst check-in</i> node.</li>
+		<li><b>Shift Plan Entry</b>: shifts (filters <code>startDate</code>, <code>person</code>, <code>status</code>, …);
+			<i>Clock In / Clock Out</i> starts or ends the work time of an own shift of the token's user.</li>
+		<li><b>Occupancy</b> (ERP setting <code>integration_occupancy_api_enabled</code>): per bookable whether a booking runs now,
+			the current and next booking, lead / lag time and opening hours. The optional ID filters bookables (<code>7,8</code>).</li>
+		<li><b>Usage Counter</b> (meters of bookables): <i>Set Value</i> writes the reading in <code>msg.payload</code>
+			(number or <code>{"value": 1240.2}</code>).</li>
+		<li><b>Notification</b>: notifications of the token's person; <i>Mark as Read</i>.</li>
+	</ul>
+	<p>
+		A function that is switched off in the ERP settings shows <i>Funktion im ERP deaktiviert: &lt;setting&gt;</i> as status;
+		<code>msg.error.featureDisabled</code> names the setting.
 	</p>
 	<p>Errors are thrown with the ERP error code and message (<code>X-IW-ERROR-CODE</code> / <code>X-IW-ERROR-JSON</code>), also in <code>msg.error</code>; use a <i>catch</i> node.</p>
 </script>
