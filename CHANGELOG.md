@@ -6,7 +6,7 @@
   The node types (`inwendo-erp-*`) stay the same, so existing flows keep working.
 - Product name in the editor: palette category *vynst (inwendo ERP)*, nodes *vynst*, *vynst trigger*,
   *vynst lock* ...
-- Publishing from GitHub Actions with npm provenance.
+- Publishing from GitHub Actions only, with npm trusted publishing (no token) and provenance.
 
 ## 0.2.0
 

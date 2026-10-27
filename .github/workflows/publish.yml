@@ -1,13 +1,11 @@
 # Publishes the package to npm when a version tag is pushed or when the workflow is started by hand
-# (Actions tab or API); it publishes the version in package.json.
+# (Actions tab or API); it publishes the version in package.json and skips a version already on npm.
 #
-# Published only from GitHub Actions, with npm provenance (needs `id-token: write`).
-#
-# Setup on npmjs.com:
-# - First release (the package does not exist yet, so no trusted publisher can be set): a granular
-#   access token for the @inwendo scope with publish rights as repository secret NPM_TOKEN.
-# - Afterwards: package settings → Publish access → Trusted Publishers: GitHub Actions, owner
-#   `inwendo`, repository `node-red-contrib-inwendo-erp`, workflow `publish.yml`; then delete the token.
+# No token: npm trusted publishing (OIDC) with provenance, so only this workflow can publish.
+# One-time setup on npmjs.com (package settings → Publish access → Trusted Publishers):
+# GitHub Actions, owner `inwendo`, repository `node-red-contrib-inwendo-erp`, workflow `publish.yml`.
+# npm offers that setting only for a package that exists; see "Release" in README.md for the
+# one-time bootstrap version.
 #
 # New versions reach the Node-RED library (flows.nodered.org) after its refresh; the package is
 # submitted there once by hand (+ → Node).
@@ -56,9 +54,16 @@ jobs:
         continue-on-error: true
         run: npm run validate
 
-      - name: Publish
+      - name: Skip a version already on npm
+        id: check
         run: |
-          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          npm publish --provenance --access public
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is already published."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.check.outputs.skip != 'true'
+        run: npm publish --provenance --access public

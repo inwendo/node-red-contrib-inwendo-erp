@@ -245,12 +245,33 @@ MIT
 
 ## Release
 
-Releases go to npm from GitHub Actions only (`.github/workflows/publish.yml`, with npm provenance):
+Releases go to npm from GitHub Actions only (`.github/workflows/publish.yml`), without a token:
+npm trusted publishing (OIDC) with provenance.
 
 1. Raise `version` in `package.json` and add the changes to `CHANGELOG.md` (pull request).
 2. After the merge push a tag with the version (`git tag 0.3.0 && git push origin 0.3.0`) or start the
-   workflow *Publish* by hand (Actions tab); it publishes the version in `package.json`.
+   workflow *Publish* by hand (Actions tab); it publishes the version in `package.json` and skips a
+   version that is already on npm.
 
 The workflow lints, runs the tests and the Node-RED scorecard check (`npm run validate`) first.
 Updates appear in the [Node-RED library](https://flows.nodered.org/) after its next refresh (or use
 *request refresh* on the package page).
+
+### One-time setup
+
+npm lets you add a trusted publisher only to a package that exists. So the package is created once
+from a local npm login (browser + 2FA, no token is stored anywhere) with a placeholder version (the first real version from
+the workflow replaces it as `latest`; deprecate it afterwards with
+`npm deprecate @inwendo/node-red-vynst@0.0.0-bootstrap "placeholder"`):
+
+```bash
+npm login
+npm version 0.0.0-bootstrap --no-git-tag-version
+npm publish --access public --tag bootstrap
+git checkout package.json package-lock.json
+```
+
+Then on npmjs.com: *@inwendo/node-red-vynst → Settings → Trusted Publisher → GitHub Actions*, owner
+`inwendo`, repository `node-red-contrib-inwendo-erp`, workflow `publish.yml`; set *Publishing access*
+to *Require two-factor authentication and disallow tokens*. Start *Publish* for the first real
+version, then submit the package once at flows.nodered.org (+ → Node).

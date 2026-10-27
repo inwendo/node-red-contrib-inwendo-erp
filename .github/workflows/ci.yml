@@ -2,8 +2,7 @@ name: CI
 
 on:
   push:
-    # claude/compassionate-shannon-2bvhp9 is the current default branch (rename it to main later).
-    branches: [main, master, claude/compassionate-shannon-2bvhp9]
+    branches: [main, master]
   pull_request:
 
 jobs:
