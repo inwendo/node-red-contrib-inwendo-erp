@@ -1,0 +1,8 @@
+[
+	{ "id": "d4a0f0e0d0c0b001", "type": "tab", "label": "vynst new ticket", "disabled": false, "info": "Reacts to a new ticket in vynst (inwendo ERP): the trigger gets the event over the ERP MQTT broker, the vynst node loads the whole ticket, the debug node stands for your notification (chat, mail, Telegram, display ...)." },
+	{ "id": "d4a0f0e0d0c0b002", "type": "inwendo-erp-config", "name": "vynst (inwendo ERP)", "host": "https://demo.iw-erp.de" },
+	{ "id": "d4a0f0e0d0c0b003", "type": "inwendo-erp-trigger", "z": "d4a0f0e0d0c0b001", "name": "new ticket", "server": "d4a0f0e0d0c0b002", "entityType": "CustomerTicket", "action": "create", "delivery": "mqtt", "publicUrl": "", "instanceId": "", "x": 130, "y": 80, "wires": [["d4a0f0e0d0c0b004"]] },
+	{ "id": "d4a0f0e0d0c0b004", "type": "change", "z": "d4a0f0e0d0c0b001", "name": "msg.id = ticket id", "rules": [{ "t": "set", "p": "id", "pt": "msg", "to": "payload.id", "tot": "msg" }], "action": "", "property": "", "from": "", "to": "", "reg": false, "x": 330, "y": 80, "wires": [["d4a0f0e0d0c0b005"]] },
+	{ "id": "d4a0f0e0d0c0b005", "type": "inwendo-erp", "z": "d4a0f0e0d0c0b001", "name": "load ticket", "server": "d4a0f0e0d0c0b002", "resource": "ticket", "operation": "get", "entityId": "", "returnAll": false, "limit": 50, "searchString": "", "method": "GET", "endpoint": "", "parentId": "", "x": 530, "y": 80, "wires": [["d4a0f0e0d0c0b006"]] },
+	{ "id": "d4a0f0e0d0c0b006", "type": "debug", "z": "d4a0f0e0d0c0b001", "name": "notify: new ticket", "active": true, "tosidebar": true, "console": false, "complete": "payload", "targetType": "msg", "x": 730, "y": 80, "wires": [] }
+]

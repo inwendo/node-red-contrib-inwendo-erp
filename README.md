@@ -219,6 +219,7 @@ when the ERP answer has them (the attendance list scanner returns no person data
 | `floodlight-during-bookings` | Booking schedule (fallback, reads the bookings) → floodlight relay on at the start, off after the end. |
 | `rfid-reader-access-relay` | RFID reader → access check of an ERP smart lock → relay opens 3 s, LED / buzzer when denied. |
 | `check-in-at-the-entrance` | Card / QR reader → attendance list check-in / check-out → welcome / goodbye / refused. |
+| `new-ticket-notification` | Trigger (new ticket over MQTT) → load the ticket with the vynst node → notification (debug node as placeholder). |
 | `virtual-locks` | Two virtual locks without hardware (a door the app opens, a room with a QR scanner) behind an MQTT lock bridge: they confirm, lock themselves again after 5 s and can be jammed; a reader (inject node or `POST /virtual-locks/front_door/reader`) checks a card. `GET /virtual-locks` shows their state and history. Also on developer.vynst.de. |
 
 ## Development
