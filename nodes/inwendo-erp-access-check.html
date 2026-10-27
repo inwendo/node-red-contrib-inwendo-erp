@@ -1,6 +1,6 @@
 <script type="text/javascript">
 	RED.nodes.registerType('inwendo-erp-access-check', {
-		category: 'inwendo ERP',
+		category: 'vynst (inwendo ERP)',
 		color: '#7fb7df',
 		defaults: {
 			name: { value: '' },
@@ -24,7 +24,7 @@
 		outputs: 2,
 		outputLabels: ['access granted', 'access denied'],
 		icon: 'inwendo.png',
-		paletteLabel: 'inwendo erp access check',
+		paletteLabel: 'vynst access check',
 		label: function () {
 			return this.name || 'access ' + (this.target === 'smartLock' ? 'smart lock ' + this.smartLockId : this.lockId || '');
 		},
@@ -87,7 +87,7 @@
 </script>
 
 <script type="text/html" data-help-name="inwendo-erp-access-check">
-	<p>Asks the inwendo ERP whether a credential read by a barcode, QR or RFID reader may open a lock.</p>
+	<p>Asks vynst (inwendo ERP) whether a credential read by a barcode, QR or RFID reader may open a lock.</p>
 	<h3>Inputs</h3>
 	<dl class="message-properties">
 		<dt>payload <span class="property-type">string | number | Buffer</span></dt>

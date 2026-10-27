@@ -1,6 +1,6 @@
-# node-red-contrib-inwendo-erp
+# @inwendo/node-red-vynst
 
-[Node-RED](https://nodered.org/) nodes for the [inwendo ERP](https://www.inwendo.de/):
+[Node-RED](https://nodered.org/) nodes for [vynst (inwendo ERP)](https://www.vynst.de/):
 
 - **API token login** and the ERP functions of the n8n node: read, create and update ERP data, PDFs,
   generic API requests, and a trigger for ERP webhooks (https or over the ERP's MQTT broker).
@@ -16,32 +16,32 @@
   - *Node-RED → ERP*: a barcode, QR or RFID reader at Node-RED reads a number, the ERP checks the access
     with the same rules as the app and answers yes or no; the flow continues with the answer.
 
-Requires an ERP version with the `/api/nodered/*` endpoints.
+Requires a vynst (inwendo ERP) version with the `/api/nodered/*` endpoints.
 
 ## Install
 
 ```bash
 cd ~/.node-red
-npm install node-red-contrib-inwendo-erp
+npm install @inwendo/node-red-vynst
 ```
 
-or in the editor: *Manage palette → Install → node-red-contrib-inwendo-erp*. Node.js 18 or newer.
+or in the editor: *Manage palette → Install → @inwendo/node-red-vynst*. Node.js 18 or newer.
 
 ## Nodes
 
 | Node | Purpose |
 |---|---|
 | **inwendo-erp-config** | ERP host and API token (JWT). "Test token" calls `/api/base/api_access_token_test`. |
-| **inwendo erp** | Resources Booking, Company, Event, Event Sign-Up, Invoice, News Article, Offer, Person, Project, Smart Lock, Smart Lock Log, Ticket, Time Entry, Webhook – operations Get, Get Many (limit or all pages), Create, Update (PATCH), Get PDF; smart locks also Unlock, Lock, Status. New: Inventory Loan, Attendance List, Attendance List Entry, Shift Plan Entry, Occupancy, Usage Counter, Notification (see below). Plus *Generic API Request*. |
-| **inwendo erp trigger** | Starts a flow when an ERP entity is created / updated / deleted. Registers its webhook on deploy; delivery as https webhook or over the ERP's MQTT broker. |
-| **inwendo erp booking schedule** | Starts a flow before / at the start / at the end / after the end of bookings (`booking_pre_start`, `booking_start`, `booking_end`, `booking_post_end`), optionally for some bookables only. |
-| **inwendo erp check-in** | `msg.payload` = card number / QR code → attendance list check-in / check-out or staff clock in / out; output 1 *done*, output 2 *refused*. |
+| **vynst** | Resources Booking, Company, Event, Event Sign-Up, Invoice, News Article, Offer, Person, Project, Smart Lock, Smart Lock Log, Ticket, Time Entry, Webhook – operations Get, Get Many (limit or all pages), Create, Update (PATCH), Get PDF; smart locks also Unlock, Lock, Status. New: Inventory Loan, Attendance List, Attendance List Entry, Shift Plan Entry, Occupancy, Usage Counter, Notification (see below). Plus *Generic API Request*. |
+| **vynst trigger** | Starts a flow when an ERP entity is created / updated / deleted. Registers its webhook on deploy; delivery as https webhook or over the ERP's MQTT broker. |
+| **vynst booking schedule** | Starts a flow before / at the start / at the end / after the end of bookings (`booking_pre_start`, `booking_start`, `booking_end`, `booking_post_end`), optionally for some bookables only. |
+| **vynst check-in** | `msg.payload` = card number / QR code → attendance list check-in / check-out or staff clock in / out; output 1 *done*, output 2 *refused*. |
 | **inwendo-erp-lock-bridge** | Config node: connects the locks of this Node-RED to the ERP (MQTT or https push). |
-| **inwendo erp lock** | One lock. Outputs the ERP commands (`open`, `lock`); input: the lock state. |
-| **inwendo erp lock result** | Reports the result of a command (for locks set to wait for the result). |
-| **inwendo erp access check** | `msg.payload` = what the reader read → output 1 *granted*, output 2 *denied*. |
+| **vynst lock** | One lock. Outputs the ERP commands (`open`, `lock`); input: the lock state. |
+| **vynst lock result** | Reports the result of a command (for locks set to wait for the result). |
+| **vynst access check** | `msg.payload` = what the reader read → output 1 *granted*, output 2 *denied*. |
 
-Settings of the `inwendo erp` node can be overridden per message (`msg.resource`, `msg.operation`,
+Settings of the `vynst` node can be overridden per message (`msg.resource`, `msg.operation`,
 `msg.id`, `msg.query`, `msg.searchString`, `msg.limit`, `msg.method`, `msg.endpoint`); `msg.payload`
 holds the fields for create / update. ERP errors are thrown with the ERP error code and message
 (`X-IW-ERROR-CODE` / `X-IW-ERROR-JSON`), use a *catch* node.
@@ -88,7 +88,7 @@ Create the token in the ERP under **Settings → API Access Tokens**, long-lived
 | Attendance List (Entry) | **Event** |
 | Shift Plan Entry | **Time** (Clock In / Out: a login with an own shift) |
 | Notification | **Notification** (read), the token's person for *Mark as Read* |
-| inwendo erp node | the scopes of the resources (CRM, CRM Project, Ticket, Time, Billing, Event, Event Booking, Media; Webhook + *allow admin functions* for the webhook resource) |
+| vynst node | the scopes of the resources (CRM, CRM Project, Ticket, Time, Billing, Event, Event Booking, Media; Webhook + *allow admin functions* for the webhook resource) |
 | Smart Lock Unlock / Lock | the token's user needs access to the lock (as in the app) |
 
 Optional hardening: a separate token for Node-RED with the URL path restriction `/api/nodered/.*`.
@@ -97,7 +97,7 @@ Optional hardening: a separate token for Node-RED with the URL path restriction 
 
 ### Set up
 
-1. Add an **inwendo erp lock** node, create a **lock bridge** for it (name, ERP connection, delivery).
+1. Add an **vynst lock** node, create a **lock bridge** for it (name, ERP connection, delivery).
    Instance ID and secret are generated when the bridge dialog opens; they identify this Node-RED in
    the ERP, do not copy them to another Node-RED.
 2. Give every lock a unique **Lock ID** (`front_door`) and its name in the ERP. *In the app*: *Open
@@ -122,12 +122,12 @@ old commands: a command is executed at most 30 seconds (plus 30 seconds clock di
 user tapped *open*. Keep the clock of the Node-RED host synchronized (NTP).
 
 With *Report success when the message is sent* the lock confirms every command at once. With *Wait for
-an "inwendo erp lock result" node* the flow reports the result: keep `msg._inwendoLock` on the message
+a "vynst lock result" node* the flow reports the result: keep `msg._inwendoLock` on the message
 and set `msg.success` (`false` + `msg.message` for an error, `msg.state` for the new state).
 
 ### Access check of a reader
 
-Send what the reader read into **inwendo erp access check** (`msg.payload`, string, number or Buffer;
+Send what the reader read into **vynst access check** (`msg.payload`, string, number or Buffer;
 line breaks are removed). The ERP accepts:
 
 | Credential | Source |
@@ -210,7 +210,7 @@ when the ERP answer has them (the attendance list scanner returns no person data
 
 ## Examples
 
-*Import → Examples → node-red-contrib-inwendo-erp*:
+*Import → Examples → @inwendo/node-red-vynst*:
 
 | Example | What it does |
 |---|---|
@@ -242,3 +242,15 @@ that flow (`e2e/tests/api/nodered-runtime.spec.ts`); regenerate it there instead
 ## License
 
 MIT
+
+## Release
+
+Releases go to npm from GitHub Actions only (`.github/workflows/publish.yml`, with npm provenance):
+
+1. Raise `version` in `package.json` and add the changes to `CHANGELOG.md` (pull request).
+2. After the merge push a tag with the version (`git tag 0.3.0 && git push origin 0.3.0`) or start the
+   workflow *Publish* by hand (Actions tab); it publishes the version in `package.json`.
+
+The workflow lints, runs the tests and the Node-RED scorecard check (`npm run validate`) first.
+Updates appear in the [Node-RED library](https://flows.nodered.org/) after its next refresh (or use
+*request refresh* on the package page).

@@ -38,7 +38,7 @@ module.exports = function (RED) {
 				return;
 			}
 			if (!server) {
-				done(new Error('inwendo ERP connection is not configured'));
+				done(new Error('vynst (inwendo ERP) connection is not configured'));
 				return;
 			}
 			const listId = msg.listId !== undefined && msg.listId !== null && msg.listId !== '' ? msg.listId : config.listId;

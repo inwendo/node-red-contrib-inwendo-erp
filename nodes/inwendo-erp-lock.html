@@ -1,6 +1,6 @@
 <script type="text/javascript">
 	RED.nodes.registerType('inwendo-erp-lock', {
-		category: 'inwendo ERP',
+		category: 'vynst (inwendo ERP)',
 		color: '#7fb7df',
 		defaults: {
 			name: { value: '' },
@@ -14,9 +14,9 @@
 		inputs: 1,
 		outputs: 1,
 		icon: 'inwendo.png',
-		paletteLabel: 'inwendo erp lock',
+		paletteLabel: 'vynst lock',
 		label: function () {
-			return this.name || this.lockName || this.lockId || 'inwendo erp lock';
+			return this.name || this.lockName || this.lockId || 'vynst lock';
 		},
 		inputLabels: 'lock state',
 		outputLabels: 'command',
@@ -58,7 +58,7 @@
 		<label for="node-input-confirm"><i class="fa fa-check"></i> Result</label>
 		<select id="node-input-confirm">
 			<option value="auto">Report success when the message is sent</option>
-			<option value="manual">Wait for an "inwendo erp lock result" node</option>
+			<option value="manual">Wait for a "vynst lock result" node</option>
 		</select>
 	</div>
 	<div class="form-row inwendo-erp-lock-timeout">
@@ -91,8 +91,8 @@
 	<p>
 		The ERP sends a command when a user with access taps <i>open</i> in the app, or through the API and Home Assistant.
 		Access is checked in the ERP, Node-RED only executes. With <i>Wait for a result node</i> wire the end of your flow
-		into an <i>inwendo erp lock result</i> node with <code>msg.success</code>; the ERP log then shows failures.
+		into a <i>vynst lock result</i> node with <code>msg.success</code>; the ERP log then shows failures.
 	</p>
 	<p>With <i>QR code</i> the app shows a QR code for this lock instead of the open button; check it with an
-		<i>inwendo erp access check</i> node behind your scanner.</p>
+		<i>vynst access check</i> node behind your scanner.</p>
 </script>

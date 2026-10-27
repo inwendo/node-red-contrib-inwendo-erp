@@ -1,6 +1,6 @@
 <script type="text/javascript">
 	RED.nodes.registerType('inwendo-erp-check-in', {
-		category: 'inwendo ERP',
+		category: 'vynst (inwendo ERP)',
 		color: '#7fb7df',
 		defaults: {
 			name: { value: '' },
@@ -12,7 +12,7 @@
 		outputs: 2,
 		outputLabels: ['checked in / out', 'refused'],
 		icon: 'inwendo.png',
-		paletteLabel: 'inwendo erp check-in',
+		paletteLabel: 'vynst check-in',
 		label: function () {
 			return this.name || (this.mode === 'staffClock' ? 'staff clock' : 'check-in ' + (this.listId || ''));
 		},
@@ -52,7 +52,7 @@
 </script>
 
 <script type="text/html" data-help-name="inwendo-erp-check-in">
-	<p>Check-in at the entrance with a card or QR code reader: attendance list or staff time clock of the inwendo ERP.</p>
+	<p>Check-in at the entrance with a card or QR code reader: attendance list or staff time clock of vynst (inwendo ERP).</p>
 	<h3>Inputs</h3>
 	<dl class="message-properties">
 		<dt>payload <span class="property-type">string | number | Buffer</span></dt>

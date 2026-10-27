@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * HTTP client for the inwendo ERP API (API token login, same as the n8n node).
+ * HTTP client for vynst (inwendo ERP) API (API token login, same as the n8n node).
  *
  * Every request sends X-IW-Trigger-Source: nodered so the ERP does not report changes made by
  * Node-RED back to the Node-RED webhooks (no trigger -> flow -> update -> trigger loop).
@@ -26,7 +26,7 @@ class InwendoErpError extends Error {
 function normalizeHost(host) {
 	const value = String(host || '').trim().replace(/\/+$/, '');
 	if (!value) {
-		throw new InwendoErpError('inwendo ERP host is not configured');
+		throw new InwendoErpError('vynst (inwendo ERP) host is not configured');
 	}
 	return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }
@@ -48,9 +48,9 @@ function buildUrl(host, path, qs) {
 function errorFromResponse(response, bodyText) {
 	const erpCode = response.headers.get('x-iw-error-code') || undefined;
 	const erpDetails = response.headers.get('x-iw-error-json') || undefined;
-	let message = `inwendo ERP request failed with HTTP ${response.status}`;
+	let message = `vynst (inwendo ERP) request failed with HTTP ${response.status}`;
 	if (erpCode) {
-		message = `inwendo ERP error ${erpCode}`;
+		message = `vynst (inwendo ERP) error ${erpCode}`;
 	}
 	if (erpDetails) {
 		message += `: ${erpDetails}`;
@@ -108,7 +108,7 @@ class ErpClient {
 	 */
 	async requestFull(method, path, { body, qs, binary = false, timeout } = {}) {
 		if (!this.apiToken) {
-			throw new InwendoErpError('inwendo ERP API token is not configured');
+			throw new InwendoErpError('vynst (inwendo ERP) API token is not configured');
 		}
 		const headers = {
 			'x-iw-jwt-token': this.apiToken,
@@ -129,7 +129,7 @@ class ErpClient {
 			response = await this.fetch(buildUrl(this.host, path, qs), options);
 		} catch (error) {
 			const reason = error && error.name === 'AbortError' ? 'timeout' : (error && error.message) || String(error);
-			throw new InwendoErpError(`inwendo ERP request failed: ${reason}`);
+			throw new InwendoErpError(`vynst (inwendo ERP) request failed: ${reason}`);
 		} finally {
 			clearTimeout(timer);
 		}

@@ -15,7 +15,7 @@
 		};
 
 		RED.nodes.registerType('inwendo-erp-booking-schedule', {
-			category: 'inwendo ERP',
+			category: 'vynst (inwendo ERP)',
 			color: '#7fb7df',
 			defaults: {
 				name: { value: '' },
@@ -40,7 +40,7 @@
 			inputs: 0,
 			outputs: 1,
 			icon: 'inwendo.png',
-			paletteLabel: 'inwendo erp booking schedule',
+			paletteLabel: 'vynst booking schedule',
 			label: function () {
 				return this.name || 'booking ' + (EVENT_TYPES[this.eventType] || this.eventType) + (this.bookables ? ' ' + this.bookables : '');
 			},

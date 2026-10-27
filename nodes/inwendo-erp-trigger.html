@@ -36,7 +36,7 @@
 		];
 
 		RED.nodes.registerType('inwendo-erp-trigger', {
-			category: 'inwendo ERP',
+			category: 'vynst (inwendo ERP)',
 			color: '#7fb7df',
 			defaults: {
 				name: { value: '' },
@@ -56,7 +56,7 @@
 			inputs: 0,
 			outputs: 1,
 			icon: 'inwendo.png',
-			paletteLabel: 'inwendo erp trigger',
+			paletteLabel: 'vynst trigger',
 			label: function () {
 				const entity = ENTITY_TYPES.find((entry) => entry[0] === this.entityType);
 				return this.name || 'ERP ' + (entity ? entity[1] : this.entityType) + ' ' + (this.action === 'all' ? '' : this.action);
@@ -120,7 +120,7 @@
 </script>
 
 <script type="text/html" data-help-name="inwendo-erp-trigger">
-	<p>Starts a flow when an entity in the inwendo ERP is created, updated or deleted.</p>
+	<p>Starts a flow when an entity in vynst (inwendo ERP) is created, updated or deleted.</p>
 	<h3>Outputs</h3>
 	<dl class="message-properties">
 		<dt>payload <span class="property-type">object</span></dt>
@@ -135,7 +135,7 @@
 	<p>
 		On deploy the node registers its webhook in the ERP (<code>/api/nodered/webhook</code>) with a fresh token and checks
 		the <code>X-IW-Webhook-Token</code> header of every call. Removing the node removes the webhook. Changes that Node-RED makes
-		itself through the <i>inwendo erp</i> node are not reported back.
+		itself through the <i>vynst</i> node are not reported back.
 	</p>
 	<p>
 		<b>Delivery over the ERP MQTT broker</b>: the registration returns access to the ERP's broker (websocket over TLS, read
@@ -143,5 +143,5 @@
 		runs out. No public URL needed. When the ERP setting <code>integration_mqtt_trigger_enabled</code> is off, the status shows
 		<i>Funktion im ERP deaktiviert: integration_mqtt_trigger_enabled</i>.
 	</p>
-	<p>For booking start / end events use the <i>inwendo erp booking schedule</i> node.</p>
+	<p>For booking start / end events use the <i>vynst booking schedule</i> node.</p>
 </script>

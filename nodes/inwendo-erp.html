@@ -58,7 +58,7 @@
 		}
 
 		RED.nodes.registerType('inwendo-erp', {
-			category: 'inwendo ERP',
+			category: 'vynst (inwendo ERP)',
 			color: '#7fb7df',
 			defaults: {
 				name: { value: '' },
@@ -81,12 +81,12 @@
 					return this.name;
 				}
 				if (this.resource === 'genericRequest') {
-					return (this.method || 'GET') + ' ' + (this.endpoint || 'inwendo erp');
+					return (this.method || 'GET') + ' ' + (this.endpoint || 'vynst');
 				}
 				const resource = RESOURCES[this.resource];
 				return (OPERATIONS[this.operation] || this.operation) + ': ' + (resource ? resource[0] : this.resource);
 			},
-			paletteLabel: 'inwendo erp',
+			paletteLabel: 'vynst',
 			oneditprepare: function () {
 				const node = this;
 				const resourceSelect = $('#node-input-resource');
@@ -187,7 +187,7 @@
 </script>
 
 <script type="text/html" data-help-name="inwendo-erp">
-	<p>Reads and writes inwendo ERP data (the functions of the n8n node).</p>
+	<p>Reads and writes vynst (inwendo ERP) data (the functions of the n8n node).</p>
 	<h3>Inputs</h3>
 	<dl class="message-properties">
 		<dt class="optional">payload <span class="property-type">object</span></dt>
@@ -221,7 +221,7 @@
 			(ID = bookable, <code>msg.query = {"start": "…", "end": "…"}</code>). Get Many filters:
 			<code>state</code> (LENT, RETURNED, OVERDUE), <code>bookable</code>, <code>booking</code>, <code>person</code>.</li>
 		<li><b>Attendance List</b> and <b>Attendance List Entry</b>: entries of a list (List ID), create / update entries.
-			For check-in by card or QR code use the <i>inwendo erp check-in</i> node.</li>
+			For check-in by card or QR code use the <i>vynst check-in</i> node.</li>
 		<li><b>Shift Plan Entry</b>: shifts (filters <code>startDate</code>, <code>person</code>, <code>status</code>, …);
 			<i>Clock In / Clock Out</i> starts or ends the work time of an own shift of the token's user.</li>
 		<li><b>Occupancy</b> (ERP setting <code>integration_occupancy_api_enabled</code>): per bookable whether a booking runs now,

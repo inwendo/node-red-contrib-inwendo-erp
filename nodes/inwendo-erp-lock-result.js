@@ -15,7 +15,7 @@ module.exports = function (RED) {
 		node.on('input', (msg, send, done) => {
 			const key = msg._inwendoLock && msg._inwendoLock.key;
 			if (!key) {
-				done(new Error('msg._inwendoLock is missing: the message must come from an inwendo erp lock node'));
+				done(new Error('msg._inwendoLock is missing: the message must come from a vynst lock node'));
 				return;
 			}
 			let success = true;

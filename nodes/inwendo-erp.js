@@ -19,7 +19,7 @@ module.exports = function (RED) {
 
 		node.on('input', async (msg, send, done) => {
 			if (!server) {
-				done(new Error('inwendo ERP connection is not configured'));
+				done(new Error('vynst (inwendo ERP) connection is not configured'));
 				return;
 			}
 			try {

@@ -17,7 +17,7 @@ const MAX_BACKOFF_MS = 5 * 60 * 1000;
 
 module.exports = function (RED) {
 	/**
-	 * Offers the locks of this Node-RED (the "inwendo erp lock" nodes) to the ERP and receives their
+	 * Offers the locks of this Node-RED (the "vynst lock" nodes) to the ERP and receives their
 	 * signed commands: over the ERP's MQTT broker (works behind NAT) or as https push requests.
 	 */
 	function InwendoErpLockBridgeNode(config) {

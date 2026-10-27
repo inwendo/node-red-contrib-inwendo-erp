@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    # claude/compassionate-shannon-2bvhp9 is the current default branch (rename it to main later).
+    branches: [main, master, claude/compassionate-shannon-2bvhp9]
   pull_request:
 
 jobs:
@@ -25,3 +26,15 @@ jobs:
         env:
           IW_E2E_ERP_HOST: ${{ secrets.IW_E2E_ERP_HOST }}
           IW_E2E_ERP_TOKEN: ${{ secrets.IW_E2E_ERP_TOKEN }}
+
+  scorecard:
+    # Node-RED library scorecard (name, licence, node-red section, examples, dependencies ...).
+    # Informational: the library shows the same report after a submission.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run validate

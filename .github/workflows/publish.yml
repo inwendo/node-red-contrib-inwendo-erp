@@ -1,0 +1,64 @@
+# Publishes the package to npm when a version tag is pushed or when the workflow is started by hand
+# (Actions tab or API); it publishes the version in package.json.
+#
+# Published only from GitHub Actions, with npm provenance (needs `id-token: write`).
+#
+# Setup on npmjs.com:
+# - First release (the package does not exist yet, so no trusted publisher can be set): a granular
+#   access token for the @inwendo scope with publish rights as repository secret NPM_TOKEN.
+# - Afterwards: package settings → Publish access → Trusted Publishers: GitHub Actions, owner
+#   `inwendo`, repository `node-red-contrib-inwendo-erp`, workflow `publish.yml`; then delete the token.
+#
+# New versions reach the Node-RED library (flows.nodered.org) after its refresh; the package is
+# submitted there once by hand (+ → Node).
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Required to mint the OIDC token for trusted publishing and the provenance attestation.
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing (OIDC) needs npm 11.5.1 or newer; Node LTS may ship an older npm.
+      - run: npm install -g npm@^11.5.1
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm test
+
+      - name: Tag matches package.json
+        if: github.ref_type == 'tag'
+        run: test "$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+
+      - name: Node-RED scorecard
+        continue-on-error: true
+        run: npm run validate
+
+      - name: Publish
+        run: |
+          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          npm publish --provenance --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
