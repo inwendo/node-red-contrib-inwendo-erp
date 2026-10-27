@@ -22,7 +22,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/inwendo/node-red-contrib-inwendo-erp.git"
+		"url": "git+https://github.com/inwendo/node-red-contrib-inwendo-erp.git"
 	},
 	"bugs": {
 		"url": "https://github.com/inwendo/node-red-contrib-inwendo-erp/issues"
@@ -67,7 +67,6 @@
 		"supertest": "^7.3.1"
 	},
 	"publishConfig": {
-		"access": "public",
-		"provenance": true
+		"access": "public"
 	}
 }

@@ -267,7 +267,7 @@ the workflow replaces it as `latest`; deprecate it afterwards with
 ```bash
 npm login
 npm version 0.0.0-bootstrap --no-git-tag-version
-npm publish --access public --tag bootstrap
+npm publish --access public --tag bootstrap --provenance=false
 git checkout package.json package-lock.json
 ```
 
