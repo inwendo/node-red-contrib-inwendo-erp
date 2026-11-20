@@ -1,0 +1,178 @@
+[
+	{
+		"id": "c3b0000000003001",
+		"type": "tab",
+		"label": "vynst: turnstile, let the group in",
+		"disabled": false,
+		"info": "Turnstile with \"Gruppe einlassen\" (let the group in) behind a potential-free contact, e.g. the \"open\" input of a turnstile controller wired to a relay.\n\n1. Open \"vynst (inwendo ERP)\" and enter the address of your installation and an API token (right: events, write).\n2. Open the lock bridge once and press Done: instance id and secret are created. Deploy.\n3. In vynst: Settings > Smart locks, the Node-RED connection, \"Sync devices\". At the smart lock \"Drehkreuz\" switch on \"Leitung darf eine Gruppe einlassen\" and choose \"Bleibt offen\" or \"Einzelne Impulse\".\n4. Replace the debug node \"relay: turnstile contact\" by your relay (true = contact closed). Shelly: an mqtt out to shellies/<id>/relay/0/command with on / off.\n\nThe lock node keeps the time itself: stays open = \"hold_open\" (contact closed) until \"lock\" (contact open); single impulses = an \"open\" (contact closed for 0.5 s) every few seconds. A lost connection to vynst never leaves the turnstile open."
+	},
+	{
+		"id": "c3b0000000003002",
+		"type": "inwendo-erp-config",
+		"name": "vynst (inwendo ERP)",
+		"host": "https://demo.vynst.de"
+	},
+	{
+		"id": "c3b0000000003003",
+		"type": "inwendo-erp-lock-bridge",
+		"name": "Schwimmbad",
+		"server": "c3b0000000003002",
+		"instanceId": "",
+		"delivery": "mqtt",
+		"publicUrl": ""
+	},
+	{
+		"id": "c3b0000000003004",
+		"type": "inwendo-erp-lock",
+		"z": "c3b0000000003001",
+		"name": "",
+		"bridge": "c3b0000000003003",
+		"lockId": "turnstile",
+		"lockName": "Drehkreuz",
+		"unlockMethod": "remote",
+		"confirm": "auto",
+		"resultTimeout": 10,
+		"groupOpen": true,
+		"x": 150,
+		"y": 120,
+		"wires": [
+			[
+				"c3b0000000003005"
+			]
+		]
+	},
+	{
+		"id": "c3b0000000003005",
+		"type": "switch",
+		"z": "c3b0000000003001",
+		"name": "command",
+		"property": "payload.command",
+		"propertyType": "msg",
+		"rules": [
+			{
+				"t": "eq",
+				"v": "open",
+				"vt": "str"
+			},
+			{
+				"t": "eq",
+				"v": "hold_open",
+				"vt": "str"
+			},
+			{
+				"t": "eq",
+				"v": "lock",
+				"vt": "str"
+			}
+		],
+		"checkall": "false",
+		"repair": false,
+		"outputs": 3,
+		"x": 350,
+		"y": 120,
+		"wires": [
+			[
+				"c3b0000000003006"
+			],
+			[
+				"c3b0000000003007"
+			],
+			[
+				"c3b0000000003008"
+			]
+		]
+	},
+	{
+		"id": "c3b0000000003006",
+		"type": "trigger",
+		"z": "c3b0000000003001",
+		"name": "impulse 0.5 s",
+		"op1": "true",
+		"op2": "false",
+		"op1type": "bool",
+		"op2type": "bool",
+		"duration": "500",
+		"extend": false,
+		"overrideDelay": false,
+		"units": "ms",
+		"reset": "",
+		"bytopic": "all",
+		"topic": "topic",
+		"outputs": 1,
+		"x": 570,
+		"y": 60,
+		"wires": [
+			[
+				"c3b0000000003009"
+			]
+		]
+	},
+	{
+		"id": "c3b0000000003007",
+		"type": "change",
+		"z": "c3b0000000003001",
+		"name": "contact closed (stays open)",
+		"rules": [
+			{
+				"t": "set",
+				"p": "payload",
+				"pt": "msg",
+				"to": "true",
+				"tot": "bool"
+			}
+		],
+		"action": "",
+		"property": "",
+		"from": "",
+		"to": "",
+		"reg": false,
+		"x": 590,
+		"y": 120,
+		"wires": [
+			[
+				"c3b0000000003009"
+			]
+		]
+	},
+	{
+		"id": "c3b0000000003008",
+		"type": "change",
+		"z": "c3b0000000003001",
+		"name": "contact open (locked)",
+		"rules": [
+			{
+				"t": "set",
+				"p": "payload",
+				"pt": "msg",
+				"to": "false",
+				"tot": "bool"
+			}
+		],
+		"action": "",
+		"property": "",
+		"from": "",
+		"to": "",
+		"reg": false,
+		"x": 580,
+		"y": 180,
+		"wires": [
+			[
+				"c3b0000000003009"
+			]
+		]
+	},
+	{
+		"id": "c3b0000000003009",
+		"type": "debug",
+		"z": "c3b0000000003001",
+		"name": "relay: turnstile contact",
+		"active": true,
+		"tosidebar": true,
+		"console": false,
+		"complete": "payload",
+		"targetType": "msg",
+		"x": 840,
+		"y": 120,
+		"wires": []
+	}
+]

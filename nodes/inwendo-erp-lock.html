@@ -10,6 +10,7 @@
 			unlockMethod: { value: 'remote' },
 			confirm: { value: 'auto' },
 			resultTimeout: { value: 10, validate: RED.validators.number() },
+			groupOpen: { value: false },
 		},
 		inputs: 1,
 		outputs: 1,
@@ -65,6 +66,11 @@
 		<label for="node-input-resultTimeout"><i class="fa fa-clock-o"></i> Timeout (s)</label>
 		<input type="number" id="node-input-resultTimeout" min="1" max="25" />
 	</div>
+	<div class="form-row">
+		<label for="node-input-groupOpen"><i class="fa fa-users"></i> Group</label>
+		<input type="checkbox" id="node-input-groupOpen" style="display:inline-block; width:auto; vertical-align:top;" />
+		<label for="node-input-groupOpen" style="width:auto;">Let the group in (turnstile)</label>
+	</div>
 	<div class="form-tips">
 		The lock ID must be unique within the bridge (letters, digits, <code>_ . : -</code>); it links the lock to its ERP smart lock.
 	</div>
@@ -81,7 +87,10 @@
 	<h3>Outputs</h3>
 	<dl class="message-properties">
 		<dt>payload.command <span class="property-type">string</span></dt>
-		<dd><code>open</code> or <code>lock</code></dd>
+		<dd><code>open</code> or <code>lock</code>; with <i>Let the group in</i> also <code>hold_open</code>.</dd>
+		<dt>payload.group <span class="property-type">object</span></dt>
+		<dd>Only during a group opening: <code>mode</code> (<code>hold_open</code> or <code>pulse</code>),
+			<code>until</code> (ISO time) and <code>pulse_seconds</code>.</dd>
 		<dt>payload.lock_id, payload.smart_lock_id, payload.command_id</dt>
 		<dd>Lock id in Node-RED, smart lock id in the ERP and the id of the command (MQTT).</dd>
 		<dt>topic <span class="property-type">string</span></dt>
@@ -93,6 +102,18 @@
 		Access is checked in the ERP, Node-RED only executes. With <i>Wait for a result node</i> wire the end of your flow
 		into a <i>vynst lock result</i> node with <code>msg.success</code>; the ERP log then shows failures.
 	</p>
+	<h3>Let the group in</h3>
+	<p>For a turnstile: the leader of the date that runs now taps <i>Gruppe einlassen</i> in the app and picks the
+		minutes, for groups without app and card (a school class). Switch it on here and at the smart lock in the ERP.
+		The node keeps the time itself, so a lost connection to the ERP never leaves the turnstile open:</p>
+	<ul>
+		<li><b>Stays open</b> (<code>hold_open</code>): one message <code>hold_open</code> at the start, <code>lock</code> at the
+			end, when the leader taps <i>Jetzt schließen</i>, and when the flow is redeployed or stopped. Extending sets the new
+			end without a second <code>hold_open</code>.</li>
+		<li><b>Single impulses</b> (<code>pulse</code>): an <code>open</code> at once and every <code>pulse_seconds</code>
+			until the end, like a tap on <i>open</i> each time. Existing flows need no change.</li>
+	</ul>
+	<p>After a restart of Node-RED no group opening runs: the turnstile stays locked.</p>
 	<p>With <i>QR code</i> the app shows a QR code for this lock instead of the open button; check it with an
 		<i>vynst access check</i> node behind your scanner.</p>
 </script>

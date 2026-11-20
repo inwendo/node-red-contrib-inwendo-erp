@@ -529,6 +529,126 @@ describe('inwendo erp nodes', function () {
 		});
 	});
 
+	describe('let the group in', function () {
+		const topic = `erp/nodered/${INSTANCE}/command`;
+
+		async function loadGroupLock(lockOptions = {}) {
+			broker = await startMqttBroker();
+			const results = {};
+			for (const id of [41, 42, 43]) {
+				results[`POST /api/nodered/smart_lock/commands/${id}/result`] = () => ({ body: { status: 'succeeded' } });
+			}
+			erp = await startErpMock({
+				'POST /api/nodered/smart_lock/register': () => ({
+					body: {
+						status: 'created', connection_id: 5, locks: 1, smart_locks: 1,
+						mqtt: { url: broker.url, username: 'nodered@erp', password: 'mqtt-jwt', client_id: 'erp_nodered', topic },
+					},
+				}),
+				...results,
+			});
+			await helper.load(ALL_NODES, [
+				{ id: 'server', type: 'inwendo-erp-config', host: erp.host },
+				{ id: 'bridge', type: 'inwendo-erp-lock-bridge', server: 'server', name: 'Bad', instanceId: INSTANCE, delivery: 'mqtt' },
+				{ id: 'lock', type: 'inwendo-erp-lock', bridge: 'bridge', lockId: 'front_door', lockName: 'Drehkreuz', groupOpen: true, wires: [['out']], ...lockOptions },
+				{ id: 'out', type: 'helper' },
+			], credentials(erp));
+			const bridge = helper.getNode('bridge');
+			await waitFor(() => bridge.mqttClient && bridge.mqttClient.connected && broker.aedes.connectedClients === 1);
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			const received = [];
+			helper.getNode('out').on('input', (msg) => received.push(msg));
+			return received;
+		}
+
+		function send(command) {
+			const body = JSON.stringify(lockCommand({ valid_seconds: 30, ...command }));
+			return broker.publish(topic, JSON.stringify({ body, signature: sign(body, SECRET) }));
+		}
+
+		function resultOf(id) {
+			return waitFor(() => erp.requests.find((request) => request.path === `/api/nodered/smart_lock/commands/${id}/result`));
+		}
+
+		it('reports the capability only for locks with the switch', async function () {
+			await loadGroupLock();
+			const registration = erp.requests.find((request) => request.path === '/api/nodered/smart_lock/register').body;
+			assert.strictEqual(registration.locks[0].group_open, true);
+		});
+
+		it('without the switch the lock refuses group_open and reports no capability', async function () {
+			const received = await loadGroupLock({ groupOpen: false });
+			const registration = erp.requests.find((request) => request.path === '/api/nodered/smart_lock/register').body;
+			assert.strictEqual(registration.locks[0].group_open, undefined);
+			await send({ command_id: 41, command: 'group_open', duration_seconds: 60, mode: 'hold_open' });
+			const result = await resultOf(41);
+			assert.strictEqual(result.body.success, false);
+			assert.match(result.body.message, /not switched on/);
+			assert.strictEqual(received.length, 0);
+		});
+
+		it('hold_open: opens once, an extension keeps it open, the time over locks again', async function () {
+			const received = await loadGroupLock();
+			await send({ command_id: 41, command: 'group_open', duration_seconds: 60, mode: 'hold_open', pulse_seconds: 4 });
+			await waitFor(() => received.length === 1);
+			assert.strictEqual(received[0].payload.command, 'hold_open');
+			assert.strictEqual(received[0].payload.command_id, 41);
+			assert.strictEqual(received[0].payload.group.mode, 'hold_open');
+			assert.ok(Date.parse(received[0].payload.group.until) > Date.now() + 55000);
+			assert.strictEqual((await resultOf(41)).body.success, true);
+
+			// extended: the new end is now + 1 s, no second hold_open
+			await send({ command_id: 42, command: 'group_open', duration_seconds: 1, mode: 'hold_open' });
+			assert.strictEqual((await resultOf(42)).body.success, true);
+			await waitFor(() => received.length === 2, 3000);
+			assert.strictEqual(received[1].payload.command, 'lock');
+			assert.strictEqual(received[1].payload.command_id, undefined);
+			assert.strictEqual(helper.getNode('lock').groupOpening, null);
+		});
+
+		it('pulse: an impulse at once and every pulse_seconds, group_close stops them', async function () {
+			const received = await loadGroupLock();
+			await send({ command_id: 41, command: 'group_open', duration_seconds: 60, mode: 'pulse', pulse_seconds: 1 });
+			await waitFor(() => received.length >= 3, 4000);
+			assert.deepStrictEqual(received.slice(0, 3).map((msg) => msg.payload.command), ['open', 'open', 'open']);
+			assert.strictEqual(received[0].payload.command_id, 41);
+			assert.strictEqual(received[1].payload.group.pulse_seconds, 1);
+
+			await send({ command_id: 42, command: 'group_close' });
+			assert.strictEqual((await resultOf(42)).body.success, true);
+			const count = received.length;
+			await new Promise((resolve) => setTimeout(resolve, 1500));
+			assert.strictEqual(received.length, count, 'no impulse after group_close');
+			assert.strictEqual(helper.getNode('lock').groupOpening, null);
+		});
+
+		it('group_close on a door held open locks at once', async function () {
+			const received = await loadGroupLock();
+			await send({ command_id: 41, command: 'group_open', duration_seconds: 60, mode: 'hold_open' });
+			await waitFor(() => received.length === 1);
+			await send({ command_id: 42, command: 'group_close' });
+			await waitFor(() => received.length === 2);
+			assert.strictEqual(received[1].payload.command, 'lock');
+			assert.strictEqual(received[1].payload.command_id, 42);
+		});
+
+		it('refuses a duration outside the limits', async function () {
+			const received = await loadGroupLock();
+			await send({ command_id: 41, command: 'group_open', duration_seconds: 0, mode: 'hold_open' });
+			assert.strictEqual((await resultOf(41)).body.success, false);
+			assert.strictEqual(received.length, 0);
+		});
+
+		it('a failed opening counts as closed (wait for the result node)', async function () {
+			const received = await loadGroupLock({ confirm: 'manual', resultTimeout: 1 });
+			await send({ command_id: 41, command: 'group_open', duration_seconds: 60, mode: 'hold_open' });
+			const result = await resultOf(41);
+			assert.strictEqual(result.body.success, false);
+			assert.strictEqual(helper.getNode('lock').groupOpening, null);
+			assert.deepStrictEqual(received.map((msg) => msg.payload.command), ['hold_open', 'lock']);
+		});
+	});
+
 	describe('lock bridge with push', function () {
 		it('executes signed push commands and answers with the result', async function () {
 			erp = await startErpMock({ 'POST /api/nodered/smart_lock/register': () => ({ body: { status: 'created', smart_locks: 1 } }) });

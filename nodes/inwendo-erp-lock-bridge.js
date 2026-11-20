@@ -95,12 +95,19 @@ module.exports = function (RED) {
 		};
 
 		bridge.lockDefinitions = function () {
-			return Array.from(bridge.locks.values()).map((lock) => ({
-				id: lock.lockId,
-				name: lock.lockName,
-				state: lock.state,
-				unlock_method: lock.unlockMethod,
-			}));
+			return Array.from(bridge.locks.values()).map((lock) => {
+				const definition = {
+					id: lock.lockId,
+					name: lock.lockName,
+					state: lock.state,
+					unlock_method: lock.unlockMethod,
+				};
+				if (lock.groupOpen) {
+					// the ERP offers "let the group in" only for locks that report it
+					definition.group_open = true;
+				}
+				return definition;
+			});
 		};
 
 		function connectedStatus() {
