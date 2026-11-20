@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- *Let the group in* at the **vynst lock** node (check box, off by default): the lock reports
+  `group_open` to the ERP and executes `group_open` / `group_close` for a turnstile. Mode *stays open*
+  sends `hold_open` and `lock` at the end, mode *single impulses* an `open` every `pulse_seconds`. The node
+  keeps the time itself, so a lost ERP connection never leaves the turnstile open.
+
 ## 0.3.1
 
 - New example `new-ticket-notification` (trigger + vynst node), so every node has an example.
